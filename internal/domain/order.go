@@ -1,6 +1,13 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrOrderNotPending = errors.New("order is not pending")
+)
 
 type OrderID int64
 
@@ -57,4 +64,27 @@ func NewOrder(
 		Status:    PendingOrder,
 		CreatedAt: createdAt,
 	}
+}
+
+// Fill marks the order as filled.
+func (o *Order) Fill(filledAt time.Time) error {
+	if o.Status != PendingOrder {
+		return ErrOrderNotPending
+	}
+
+	o.Status = FilledOrder
+	o.FilledAt = &filledAt
+
+	return nil
+}
+
+// Cancel marks the order as cancelled.
+func (o *Order) Cancel() error {
+	if o.Status != PendingOrder {
+		return ErrOrderNotPending
+	}
+
+	o.Status = CancelledOrder
+
+	return nil
 }

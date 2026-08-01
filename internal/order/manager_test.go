@@ -9,7 +9,6 @@ import (
 )
 
 func TestOrderManagerConsume(t *testing.T) {
-
 	queue := events.NewEventQueue()
 
 	manager := NewManager(
@@ -18,13 +17,11 @@ func TestOrderManagerConsume(t *testing.T) {
 	)
 
 	signal := events.NewSignalGeneratedEvent(
-		1,
-		"TestStrategy",
-		"BTCUSDT",
-		"1d",
-		events.SignalBuy,
-		time.Now(),
-		1,
+		1,               // RunID
+		"BTCUSDT",       // Symbol
+		domain.BuyOrder, // SignalType
+		1,               // Quantity
+		time.Now(),      // SignalTime
 	)
 
 	if err := manager.Consume(signal); err != nil {
@@ -40,9 +37,20 @@ func TestOrderManagerConsume(t *testing.T) {
 		t.Fatal("expected event")
 	}
 
-	_, ok = event.(events.OrderCreatedEvent)
-
+	orderEvent, ok := event.(events.OrderCreatedEvent)
 	if !ok {
 		t.Fatal("expected OrderCreatedEvent")
+	}
+
+	if orderEvent.Order.Symbol != "BTCUSDT" {
+		t.Fatalf("expected symbol BTCUSDT got %s", orderEvent.Order.Symbol)
+	}
+
+	if orderEvent.Order.Side != domain.BuyOrder {
+		t.Fatalf("expected side BUY got %s", orderEvent.Order.Side)
+	}
+
+	if orderEvent.Order.Status != domain.PendingOrder {
+		t.Fatalf("expected status PENDING got %s", orderEvent.Order.Status)
 	}
 }

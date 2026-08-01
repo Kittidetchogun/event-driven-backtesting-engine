@@ -1,11 +1,13 @@
 package strategy
 
 import (
-	"errors"
-	"fmt"
+    "errors"
+    "fmt"
+    "time"
 
-	"event-driven-backtesting-engine/internal/domain"
-	"event-driven-backtesting-engine/internal/indicators"
+    "event-driven-backtesting-engine/internal/domain"
+    "event-driven-backtesting-engine/internal/events"
+    "event-driven-backtesting-engine/internal/indicators"
 )
 
 var ErrInvalidEmaCrossPeriods = errors.New("fast period must be greater than zero and less than slow period")
@@ -20,17 +22,24 @@ const (
 
 // EmaCross เป็นกลยุทธ์การเทรดด้วยเส้น EMA 2 เส้นตัดกัน (Fast & Slow)
 type EmaCross struct {
-	fastPeriod int
-	slowPeriod int
 
-	Fast *indicators.EMA
-	Slow *indicators.EMA
+    fastPeriod int
+    slowPeriod int
 
-	Signal Signal
+    Fast *indicators.EMA
+    Slow *indicators.EMA
 
-	initialized bool
-	prevDiff    float64
-	hasPrevDiff bool
+    Signal Signal
+
+    dispatcher *events.EventDispatcher
+
+    initialized bool
+    prevDiff    float64
+    hasPrevDiff bool
+}
+
+func (e *EmaCross) SetDispatcher(d *events.EventDispatcher) {
+    e.dispatcher = d
 }
 
 // NewEmaCross สร้าง instance ใหม่ของกลยุทธ์ EMA Cross
@@ -42,9 +51,9 @@ func NewEmaCross(fastPeriod, slowPeriod int) *EmaCross {
 	}
 }
 
-// func (e *EmaCross) Name() string {
-// 	return "EMA Cross"
-// }
+func (e *EmaCross) Name() string {
+ 	return "EMA Cross"
+}
 
 // Initialize ตรวจสอบ parameter และสร้าง Indicator EMA 2 เส้น
 func (e *EmaCross) Initialize() error {
@@ -87,10 +96,21 @@ func (e *EmaCross) OnData(candle domain.Candle) {
 	// 5. ตรวจสอบการตัดกัน (Crossover) เปรียบเทียบกับแท่งก่อนหน้า
 	if e.hasPrevDiff {
 		switch {
-		case e.prevDiff <= 0 && current > 0:
-			e.Signal = BuySignal // ตัดขึ้น -> สัญญาณซื้อ
-		case e.prevDiff >= 0 && current < 0:
-			e.Signal = SellSignal // ตัดลง -> สัญญาณขาย
+			case e.prevDiff <= 0 && current > 0:
+				e.Signal = BuySignal
+				e.dispatchSignal(
+					candle.Symbol,
+					candle.Timestamp,
+					domain.BuyOrder,
+				)
+
+			case e.prevDiff >= 0 && current < 0:
+				e.Signal = SellSignal
+				e.dispatchSignal(
+					candle.Symbol,
+					candle.Timestamp,
+					domain.SellOrder,
+				)
 		}
 	}
 
@@ -123,4 +143,26 @@ func (e *EmaCross) CurrentSignal() Signal {
 
 func (e *EmaCross) String() string {
 	return fmt.Sprintf("EMA Cross(fast=%d, slow=%d)", e.fastPeriod, e.slowPeriod)
+}
+
+func (e *EmaCross) dispatchSignal(
+    symbol string,
+    timestamp time.Time,
+    side domain.OrderSide,
+) {
+    if e.dispatcher == nil {
+        return
+    }
+
+    event := events.NewSignalGeneratedEvent(
+        1, // TODO: Replace with Backtest RunID
+        symbol,
+        side,
+        1, // TODO: Replace with Position Sizer
+        timestamp,
+    )
+
+    if err := e.dispatcher.Dispatch(event); err != nil {
+        fmt.Printf("failed to dispatch signal event: %v\n", err)
+    }
 }
