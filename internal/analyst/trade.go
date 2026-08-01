@@ -1,4 +1,4 @@
-package main
+package analyst
 
 import "event-driven-backtesting-engine/internal/domain"
 
@@ -6,7 +6,7 @@ import "event-driven-backtesting-engine/internal/domain"
 // 	InitCapital float64
 // 	Trades      []domain.Trade
 // 	Equity      float64
-// }
+// } 
 
 type TradeStat struct {
 	TotalTrades int
@@ -31,6 +31,14 @@ type TradeStat struct {
 // 	}
 // 	return total
 // }
+
+func netProfit(trades []domain.Trade) float64 {
+	total := 0.0
+	for _, t := range trades {
+		total += domain.Profit(t)
+	}
+	return total
+}
 
 func winrate(trades []domain.Trade) float64 {
 	if len(trades) == 0 {
