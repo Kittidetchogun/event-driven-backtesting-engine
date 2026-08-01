@@ -1,4 +1,5 @@
 package domain
+
 type Portfolio struct {
 	InitCapital float64
 	Equity      float64
