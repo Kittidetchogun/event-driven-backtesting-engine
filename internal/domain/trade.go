@@ -1,24 +1,42 @@
 package domain
+
 import "time"
+
 type Trade struct {
-    ID         int64
-    BacktestID int64
-    Side       string
-    EntryTime  time.Time
-    ExitTime   time.Time
-    EntryPrice float64
-    ExitPrice  float64
-    Quantity   float64
-    Fee        float64
+	TradeID int
+	RunID   int
+	OrderID int
+
+	Symbol string
+	Side   OrderSide
+
+	Quantity        float64
+	ExecutedPrice   float64
+	TransactionCost float64
+
+	ExecutedTime time.Time
 }
 
-func Profit(t Trade) float64 {
-	switch t.Side {
-	case "BUY":
-		return (t.ExitPrice - t.EntryPrice) * t.Quantity - t.Fee
-	case "SELL":
-		return (t.EntryPrice - t.ExitPrice) * t.Quantity - t.Fee
-	default:
-		return 0
+func NewTrade(
+	tradeID int,
+	runID int,
+	orderID int,
+	symbol string,
+	side OrderSide,
+	quantity float64,
+	executedPrice float64,
+	transactionCost float64,
+	executedTime time.Time,
+) Trade {
+	return Trade{
+		TradeID:         tradeID,
+		RunID:           runID,
+		OrderID:         orderID,
+		Symbol:          symbol,
+		Side:            side,
+		Quantity:        quantity,
+		ExecutedPrice:   executedPrice,
+		TransactionCost: transactionCost,
+		ExecutedTime:    executedTime,
 	}
 }
