@@ -41,7 +41,13 @@ func (e *Engine) Consume(event events.Event) error {
 	}
 
 	// 5. Create Trade
-	price := executionPrice(order)
+	executedPrice := executionPrice(order)
+
+	transactionCost := CalculateFee(
+		executedPrice,
+		order.Quantity,
+		DefaultCommissionRate,
+	)
 
 	trade := domain.NewTrade(
 		1,    // TODO: Generate Trade ID
@@ -50,8 +56,8 @@ func (e *Engine) Consume(event events.Event) error {
 		order.Symbol,
 		order.Side,
 		order.Quantity,
-		price,
-		0,    // TODO: Transaction Cost
+		executedPrice,
+		transactionCost,
 		order.CreatedAt,
 	)
 
