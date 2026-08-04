@@ -41,15 +41,17 @@ func (e *Engine) Consume(event events.Event) error {
 	}
 
 	// 5. Create Trade
+	price := executionPrice(order)
+
 	trade := domain.NewTrade(
-		1, // TODO: Replace with Trade ID Generator
+		1,    // TODO: Generate Trade ID
 		order.RunID,
 		int(order.ID),
 		order.Symbol,
 		order.Side,
 		order.Quantity,
-		order.Price,
-		0, // TODO: Transaction Cost
+		price,
+		0,    // TODO: Transaction Cost
 		order.CreatedAt,
 	)
 
