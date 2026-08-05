@@ -1,40 +1,37 @@
 package domain
 
+// Portfolio represents the current portfolio state during a backtest.
 type Portfolio struct {
+	RunID int
 	InitCapital float64
-	Equity      float64
-	Trades      []Trade
-	Cash		float64
+	Cash float64
+	Equity float64
+	PositionValue float64
+	UnrealizedPnL float64
+	RealizedPnL float64
 }
 
-// func NewPortfolio(initCapital float64) *Portfolio {
-// 	return &Portfolio{
-// 		InitCapital: initCapital,
-// 		Equity:      initCapital,
-// 		Cash:        initCapital,
-// 		Trades:      make([]Trade, 0),
-// 	}
-// }
-
-func (p *Portfolio) UpdateEquity() {
-	total := p.Cash
-	for _, trade := range p.Trades {
-		total += Profit(trade)
+// NewPortfolio creates a new portfolio with the specified initial capital.
+func NewPortfolio(
+	runID int,
+	initCapital float64,
+) Portfolio {
+	return Portfolio{
+		RunID:          runID,
+		InitCapital:    initCapital,
+		Cash:           initCapital,
+		Equity:         initCapital,
+		PositionValue:  0,
+		UnrealizedPnL:  0,
+		RealizedPnL:    0,
 	}
-	p.Equity = total
 }
 
-func (p *Portfolio) ApplyTrade(trade Trade) {
-	profit := Profit(trade)
-	p.Cash += profit
-	p.UpdateEquity()
-	p.Trades = append(p.Trades, trade)
-}
-
+// Reset resets the portfolio back to its initial state.
 func (p *Portfolio) Reset() {
 	p.Cash = p.InitCapital
 	p.Equity = p.InitCapital
-	p.Trades = make([]Trade, 0)
+	p.PositionValue = 0
+	p.UnrealizedPnL = 0
+	p.RealizedPnL = 0
 }
-
-
