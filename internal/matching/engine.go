@@ -8,13 +8,20 @@ import (
 )
 
 type Engine struct {
-	queue *events.EventQueue
+    queue *events.EventQueue
+
+    trades []domain.Trade
 }
 
 func NewEngine(queue *events.EventQueue) *Engine {
-	return &Engine{
-		queue: queue,
-	}
+    return &Engine{
+        queue:  queue,
+        trades: make([]domain.Trade, 0),
+    }
+}
+
+func (e *Engine) Trades() []domain.Trade {
+    return e.trades
 }
 
 // Consume receives OrderCreatedEvent from Event Queue.
@@ -58,8 +65,10 @@ func (e *Engine) Consume(event events.Event) error {
 		order.Quantity,
 		executedPrice,
 		transactionCost,
-		order.CreatedAt,
+		order.CreatedAt,    // Prototype: Execute immediately at CreatedAt
 	)
+
+	e.trades = append(e.trades, trade)
 
 	// 6. Push TradeExecutedEvent
 	tradeEvent := events.NewTradeExecutedEvent(trade)

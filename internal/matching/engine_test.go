@@ -66,4 +66,30 @@ func TestMatchingEngineConsume(t *testing.T) {
 			trade.ExecutedPrice,
 		)
 	}
+
+	if len(engine.Trades()) != 1 {
+		t.Fatalf("expected 1 trade, got %d", len(engine.Trades()))
+	}
+
+	storedTrade := engine.Trades()[0]
+
+	if storedTrade.Symbol != "BTCUSDT" {
+		t.Fatalf("expected BTCUSDT, got %s", storedTrade.Symbol)
+	}
+
+	if storedTrade.Side != domain.BuyOrder {
+		t.Fatalf("expected BUY")
+	}
+
+	if storedTrade.ExecutedPrice != order.Price {
+		t.Fatalf("unexpected executed price")
+	}
+
+	if storedTrade.ExecutedPrice != order.Price {
+		t.Fatalf(
+			"expected %.2f got %.2f",
+			order.Price,
+			storedTrade.ExecutedPrice,
+		)
+	}
 }
