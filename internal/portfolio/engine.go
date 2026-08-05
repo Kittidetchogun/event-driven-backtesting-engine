@@ -36,46 +36,28 @@ func (e *Engine) Consume(event events.Event) error {
 
 	trade := tradeEvent.Trade
 
-	// 2. Update Cash
-	switch trade.Side {
-
-	case domain.BuyOrder:
-		e.portfolio.Cash -=
-			trade.ExecutedPrice*trade.Quantity +
-				trade.TransactionCost
-
-	case domain.SellOrder:
-		e.portfolio.Cash +=
-			trade.ExecutedPrice*trade.Quantity -
-				trade.TransactionCost
-	}
-
-	// 3. Update Position
-	position, exists := e.positions[trade.Symbol]
-
-	if !exists {
-		position = domain.NewPosition(
-			1, // TODO: Generate PositionID
-			e.portfolio.RunID,
-			trade.Symbol,
-			trade.Side,
-			0,
-			0,
-			trade.ExecutedPrice,
-		)
-	}
+	// 2. Update Position
+	UpdatePosition(
+		e.positions,
+		e.portfolio.RunID,
+		trade,
+	)
 
 	ApplyCashUpdate(
 		&e.portfolio,
 		trade,
 	)
 
-	position.UpdatePrice(trade.ExecutedPrice)
+	// 3. Update Position Value
+	totalPositionValue := 0.0
 
-	e.positions[trade.Symbol] = position
+	for _, pos := range e.positions {
+		totalPositionValue += pos.CurrentValue
+	}
+
+	e.portfolio.PositionValue = totalPositionValue
 
 	// 4. Update Equity
-	e.portfolio.PositionValue = position.CurrentValue
 	e.portfolio.UpdateEquity()
 	e.portfolio.UpdateTimestamp(trade.ExecutedTime)
 
