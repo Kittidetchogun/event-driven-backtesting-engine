@@ -65,29 +65,10 @@ func (e *Engine) Consume(event events.Event) error {
 		)
 	}
 
-	switch trade.Side {
-
-	case domain.BuyOrder:
-
-		totalCost :=
-			position.AveragePrice*position.Quantity +
-				trade.ExecutedPrice*trade.Quantity
-
-		position.Quantity += trade.Quantity
-
-		if position.Quantity > 0 {
-			position.AveragePrice =
-				totalCost / position.Quantity
-		}
-
-	case domain.SellOrder:
-
-		position.Quantity -= trade.Quantity
-
-		if position.Quantity < 0 {
-			position.Quantity = 0
-		}
-	}
+	ApplyCashUpdate(
+		&e.portfolio,
+		trade,
+	)
 
 	position.UpdatePrice(trade.ExecutedPrice)
 
