@@ -5,3 +5,4 @@ type Performance struct {
 	// SortinoRatio float64
 	MaxDrawdown  float64
 }
+

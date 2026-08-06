@@ -13,7 +13,6 @@ type Trade struct {
 	Quantity        float64
 	ExecutedPrice   float64
 	TransactionCost float64
-
 	ExecutedTime time.Time
 }
 
