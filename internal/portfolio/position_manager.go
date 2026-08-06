@@ -52,6 +52,8 @@ func UpdatePosition(
 	}
 
 	// ---------- Sell ----------
+	UpdateRealizedPnL(&position, trade)
+
 	position.Quantity -= trade.Quantity
 
 	if position.Quantity <= 0 {
@@ -60,10 +62,8 @@ func UpdatePosition(
 		return
 	}
 
-	// Update Current Price
 	UpdatePrice(&position, trade.ExecutedPrice)
 
-	// Recalculate Values
 	UpdateMarketValue(&position)
 	UpdateUnrealizedPnL(&position)
 

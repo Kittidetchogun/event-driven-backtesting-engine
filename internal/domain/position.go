@@ -17,6 +17,8 @@ type Position struct {
 
 	UnrealizedPnL float64
 	RealizedPnL   float64
+	// อาจพิจารณาย้าย RealizedPnL ไปเก็บใน Portfolio แทนทีหลัง
+	// เพราะ Position จะถูกลบเมื่อปิด Position ทั้งหมด
 }
 
 // NewPosition creates a new position.
