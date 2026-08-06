@@ -30,33 +30,18 @@ func NewPosition(
 	currentPrice float64,
 ) Position {
 
-	position := Position{
-		PositionID:  positionID,
-		PortfolioID: portfolioID,
-		Symbol:      symbol,
-		Side:        side,
-		Quantity:    quantity,
-		AveragePrice: averagePrice,
-		CurrentPrice: currentPrice,
-	}
-
-	position.UpdateMarketValue()
-
-	return position
-}
-
-// UpdatePrice updates the market price and recalculates values.
-func (p *Position) UpdatePrice(price float64) {
-	p.CurrentPrice = price
-	p.UpdateMarketValue()
-}
-
-// UpdateMarketValue recalculates market value and unrealized PnL.
-func (p *Position) UpdateMarketValue() {
-	p.CurrentValue = p.Quantity * p.CurrentPrice
-
-	p.UnrealizedPnL =
-	(p.CurrentPrice - p.AveragePrice) * p.Quantity
+	return Position{
+        PositionID:      positionID,
+        PortfolioID:     portfolioID,
+        Symbol:          symbol,
+        Side:            side,
+        Quantity:        quantity,
+        AveragePrice:    averagePrice,
+        CurrentPrice:    currentPrice,
+        CurrentValue:    quantity * currentPrice,
+        UnrealizedPnL:   (currentPrice - averagePrice) * quantity,
+        RealizedPnL:     0,
+    }
 }
 
 // Reset clears the position.

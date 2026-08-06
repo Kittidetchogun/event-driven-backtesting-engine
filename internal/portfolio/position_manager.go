@@ -40,7 +40,12 @@ func UpdatePosition(
 		position.AveragePrice =
 			totalCost / position.Quantity
 
-		position.UpdatePrice(trade.ExecutedPrice)
+		// Update Current Price
+		UpdatePrice(&position, trade.ExecutedPrice)
+
+		// Recalculate Values
+		UpdateMarketValue(&position)
+		UpdateUnrealizedPnL(&position)
 
 		positions[trade.Symbol] = position
 		return
@@ -55,7 +60,12 @@ func UpdatePosition(
 		return
 	}
 
-	position.UpdatePrice(trade.ExecutedPrice)
+	// Update Current Price
+	UpdatePrice(&position, trade.ExecutedPrice)
+
+	// Recalculate Values
+	UpdateMarketValue(&position)
+	UpdateUnrealizedPnL(&position)
 
 	positions[trade.Symbol] = position
 }
