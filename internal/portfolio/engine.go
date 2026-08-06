@@ -58,7 +58,7 @@ func (e *Engine) Consume(event events.Event) error {
 	e.portfolio.PositionValue = totalPositionValue
 
 	// 4. Update Equity
-	e.portfolio.UpdateEquity()
+	UpdateEquity(&e.portfolio)
 	e.portfolio.UpdateTimestamp(trade.ExecutedTime)
 
 	// 5. Push PortfolioUpdatedEvent

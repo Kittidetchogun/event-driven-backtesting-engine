@@ -44,13 +44,6 @@ func (p *Portfolio) UpdateTimestamp(t time.Time) {
 	p.UpdatedAt = t
 }
 
-func (p *Portfolio) UpdateEquity() {
-	p.Equity =
-		p.Cash +
-			p.PositionValue +
-			p.UnrealizedPnL
-}
-
 func (p *Portfolio) Reset() {
 
 	p.Cash = p.InitCapital
