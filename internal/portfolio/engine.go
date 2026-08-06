@@ -11,6 +11,7 @@ type Engine struct {
 	queue     *events.EventQueue
 	portfolio domain.Portfolio
 	positions map[string]domain.Position
+	snapshots []PortfolioSnapshot
 }
 
 func NewEngine(
@@ -22,6 +23,7 @@ func NewEngine(
 		queue:     queue,
 		portfolio: portfolio,
 		positions: make(map[string]domain.Position),
+		snapshots: make([]PortfolioSnapshot, 0),
 	}
 }
 
@@ -49,17 +51,21 @@ func (e *Engine) Consume(event events.Event) error {
 	)
 
 	// 3. Update Position Value
-	totalPositionValue := 0.0
-
-	for _, pos := range e.positions {
-		totalPositionValue += pos.CurrentValue
-	}
-
-	e.portfolio.PositionValue = totalPositionValue
+	UpdatePositionValue(
+		&e.portfolio,
+		e.positions,
+	)
 
 	// 4. Update Equity
 	UpdateEquity(&e.portfolio)
 	e.portfolio.UpdateTimestamp(trade.ExecutedTime)
+
+	snapshot := NewPortfolioSnapshot(e.portfolio)
+
+	e.snapshots = append(
+		e.snapshots,
+		snapshot,
+	)
 
 	// 5. Push PortfolioUpdatedEvent
 	portfolioEvent :=
@@ -76,4 +82,8 @@ func (e *Engine) Portfolio() domain.Portfolio {
 
 func (e *Engine) Positions() map[string]domain.Position {
 	return e.positions
+}
+
+func (e *Engine) Snapshots() []PortfolioSnapshot {
+	return e.snapshots
 }
