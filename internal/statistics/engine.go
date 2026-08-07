@@ -2,7 +2,6 @@ package statistics
 
 import (
 	"fmt"
-
 	"event-driven-backtesting-engine/internal/events"
 	"event-driven-backtesting-engine/internal/portfolio"
 )
