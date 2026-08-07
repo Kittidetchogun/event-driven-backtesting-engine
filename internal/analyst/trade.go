@@ -11,56 +11,80 @@ type TradeStat struct {
 	Win_Avg          float64
 }
 
-func profit(trades []domain.Trade, position domain.Position) float64 {
-	calProfit := 0.0
-
-	for _, trade := range trades {
-		calProfit += profitTrade(trade)
-	}
-
-	return calProfit
+type ClosedTrade struct {
+    Entry domain.Trade
+    Exit  domain.Trade
+    Profit float64
 }
 
-func netProfit(trades []domain.Trade) float64 {
+func pairTrades(trades []domain.Trade) []ClosedTrade {
+    var result []ClosedTrade
+    var entryTrade *domain.Trade
+
+    for _, t := range trades {
+        if t.Side == domain.BuyOrder {
+            tmp := t
+            entryTrade = &tmp
+        } else if t.Side == domain.SellOrder && entryTrade != nil {
+
+            profit := (t.ExecutedPrice-entryTrade.ExecutedPrice)*
+                t.Quantity -
+                entryTrade.TransactionCost -
+                t.TransactionCost
+
+            result = append(result, ClosedTrade{
+                Entry:  *entryTrade,
+                Exit:   t,
+                Profit: profit,
+            })
+
+            entryTrade = nil
+        }
+    }
+
+    return result
+}
+
+
+func netProfit(close []ClosedTrade) float64 {
 	total := 0.0
-	for _, t := range trades {
-		total += profitTrade(t)
+	for _, t := range close {
+		total += t.Profit
 	}
 	return total
 }
 
-func winrate(trades []domain.Trade) float64 {
-	if len(trades) == 0 {
+func winrate(close []ClosedTrade) float64 {
+	if len(close) == 0 {
 		return 0.0
 	}
 
 	win := 0
-	for _, t := range trades {
-		if profitTrade(t) > 0 {
+	for _, t := range close {
+		if t.Profit > 0 {
 			win++
 		}
 	}
 
-	return float64(win) / float64(len(trades))
+	return float64(win) / float64(len(close))
 }
 
-func profitTrades(trades []domain.Trade) int {
+func profitTrades(close []ClosedTrade) int {
 	profitCount := 0
-	for _, t := range trades {
-		if profitTrade(t) > 0 {
+	for _, t := range close {
+		if t.Profit > 0 {
 			profitCount++
 		}
 	}
 	return profitCount
 }
 
-func lossAvg(trades []domain.Trade) float64 {
+func lossAvg(close []ClosedTrade) float64 {
 	loss := 0.0
 	lossCount := 0
-	for _, t := range trades {
-		tradeProfit := profitTrade(t)
-		if tradeProfit < 0 {
-			loss += tradeProfit
+	for _, t := range close {
+		if t.Profit < 0 {
+			loss += t.Profit
 			lossCount++
 		}
 	}
@@ -70,13 +94,12 @@ func lossAvg(trades []domain.Trade) float64 {
 	return loss / float64(lossCount)
 }
 
-func winAvg(trades []domain.Trade) float64 {
+func winAvg(close []ClosedTrade) float64 {
 	win := 0.0
 	winCount := 0
-	for _, t := range trades {
-		tradeProfit := profitTrade(t)
-		if tradeProfit > 0 {
-			win += tradeProfit
+	for _, t := range close {
+		if t.Profit > 0 {
+			win += t.Profit
 			winCount++
 		}
 	}
@@ -86,11 +109,14 @@ func winAvg(trades []domain.Trade) float64 {
 	return win / float64(winCount)
 }
 
-func profitTrade(trade domain.Trade) float64 {
-	profit := trade.ExecutedPrice * trade.Quantity
-	if trade.Side == domain.BuyOrder {
-		profit = -profit
+func NewTradeStat(trades []domain.Trade) TradeStat {
+	closedTrades := pairTrades(trades)
+	return TradeStat{
+		TotalTrades:      len(closedTrades),
+		NetProfit:        netProfit(closedTrades),
+		Winrate:            winrate(closedTrades),
+		ProfitableTrades: profitTrades(closedTrades),
+		Loss_Avg:           lossAvg(closedTrades),
+		Win_Avg:            winAvg(closedTrades),
 	}
-
-	return profit - trade.TransactionCost
 }
