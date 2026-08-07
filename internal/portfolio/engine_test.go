@@ -109,3 +109,120 @@ func TestPortfolioEngineConsume(t *testing.T) {
 		)
 	}
 }
+
+func TestPortfolioEngineConsume_InvalidEvent(t *testing.T) {
+
+	queue := events.NewEventQueue()
+
+	portfolio := domain.NewPortfolio(1, 100000)
+
+	engine := NewEngine(queue, portfolio)
+
+	event := events.NewPortfolioUpdatedEvent(portfolio)
+
+	err := engine.Consume(event)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestPortfolioEngine_AddSnapshot(t *testing.T) {
+
+	queue := events.NewEventQueue()
+
+	engine := NewEngine(
+		queue,
+		domain.NewPortfolio(1, 100000),
+	)
+
+	trade := domain.Trade{
+		Symbol: "BTCUSDT",
+		Side: domain.BuyOrder,
+
+		Quantity: 1,
+
+		ExecutedPrice: 100,
+
+		ExecutedTime: time.Now(),
+	}
+
+	event := events.NewTradeExecutedEvent(trade)
+
+	_ = engine.Consume(event)
+
+	if len(engine.Snapshots()) != 1 {
+		t.Fatalf(
+			"expected snapshot 1, got %d",
+			len(engine.Snapshots()),
+		)
+	}
+}
+
+func TestPortfolioEngine_PushPortfolioUpdatedEvent(t *testing.T) {
+
+	queue := events.NewEventQueue()
+
+	engine := NewEngine(
+		queue,
+		domain.NewPortfolio(1, 100000),
+	)
+
+	trade := domain.Trade{
+		Symbol:          "BTCUSDT",
+		Side:            domain.BuyOrder,
+		Quantity:        1,
+		ExecutedPrice:   100,
+		ExecutedTime:    time.Now(),
+	}
+
+	event := events.NewTradeExecutedEvent(trade)
+
+	if err := engine.Consume(event); err != nil {
+		t.Fatal(err)
+	}
+
+	e, ok := queue.Pop()
+
+	if !ok {
+		t.Fatal("expected event in queue")
+	}
+
+	_, ok = e.(events.PortfolioUpdatedEvent)
+
+	if !ok {
+		t.Fatal("expected PortfolioUpdatedEvent")
+	}
+}
+
+func TestPortfolioEngine_UpdatePositionValue(t *testing.T) {
+
+	queue := events.NewEventQueue()
+
+	engine := NewEngine(
+		queue,
+		domain.NewPortfolio(1, 100000),
+	)
+
+	trade := domain.Trade{
+		Symbol: "BTCUSDT",
+		Side: domain.BuyOrder,
+
+		Quantity: 2,
+
+		ExecutedPrice: 100,
+
+		ExecutedTime: time.Now(),
+	}
+
+	event := events.NewTradeExecutedEvent(trade)
+
+	_ = engine.Consume(event)
+
+	if engine.Portfolio().PositionValue != 200 {
+		t.Fatalf(
+			"expected 200 got %.2f",
+			engine.Portfolio().PositionValue,
+		)
+	}
+}
