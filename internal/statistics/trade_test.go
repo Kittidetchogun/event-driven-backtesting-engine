@@ -1,4 +1,4 @@
-package analyst
+package statistics
 
 import (
 	"math"
@@ -44,7 +44,7 @@ func TestNewTradeStatAggregatesClosedTrades(t *testing.T) {
 		domain.NewTrade(1, 1, 11, "BTCUSDT", domain.BuyOrder, 1, 100, 1, now),
 		domain.NewTrade(2, 1, 12, "BTCUSDT", domain.SellOrder, 1, 110, 1, now.Add(time.Minute)),
 		domain.NewTrade(3, 1, 13, "BTCUSDT", domain.BuyOrder, 1, 200, 1, now.Add(2*time.Minute)),
-		domain.NewTrade(4, 1, 14, "BTCUSDT", domain.SellOrder, 1, 190, 1, now.Add(3*time.Minute)),
+		domain.NewTrade(4, 1, 14, "BTCUSDT", domain.SellOrder, 1, 200, 1, now.Add(3*time.Minute)),
 	}
 
 	stat := NewTradeStat(trades)

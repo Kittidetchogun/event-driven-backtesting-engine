@@ -2,41 +2,62 @@ package statistics
 
 import (
 	"fmt"
+
+	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
 	"event-driven-backtesting-engine/internal/portfolio"
 )
 
 type Engine struct {
 	snapshots []portfolio.PortfolioSnapshot
+	trades    []domain.Trade
 }
 
 func NewEngine() *Engine {
 	return &Engine{
 		snapshots: make([]portfolio.PortfolioSnapshot, 0),
+		trades:    make([]domain.Trade, 0),
 	}
 }
 
-// Consume receives PortfolioUpdatedEvent from Event Queue.
+// Consume receives events from Event Queue.
 func (e *Engine) Consume(event events.Event) error {
 
-	// Event ต้องเป็น PortfolioUpdatedEvent
-	portfolioEvent, ok := event.(events.PortfolioUpdatedEvent)
-	if !ok {
-		return fmt.Errorf("unsupported event %T", event)
+	switch event := event.(type) {
+
+	// TradeExecutedEvent
+	case events.TradeExecutedEvent:
+
+		e.trades = append(
+			e.trades,
+			event.Trade,
+		)
+
+		return nil
+
+	// PortfolioUpdatedEvent
+	case events.PortfolioUpdatedEvent:
+
+		snapshot := portfolio.NewPortfolioSnapshot(
+			event.Portfolio,
+		)
+
+		// เก็บ Portfolio History
+		e.snapshots = append(
+			e.snapshots,
+			snapshot,
+		)
+
+		return nil
+
+	// Unsupported Event
+	default:
+
+		return fmt.Errorf(
+			"unsupported event %T",
+			event,
+		)
 	}
-
-	// สร้าง Snapshot
-	snapshot := portfolio.NewPortfolioSnapshot(
-		portfolioEvent.Portfolio,
-	)
-
-	// เก็บ History
-	e.snapshots = append(
-		e.snapshots,
-		snapshot,
-	)
-
-	return nil
 }
 
 // Snapshots returns all portfolio snapshots.
@@ -57,4 +78,14 @@ func (e *Engine) EquityCurve() []float64 {
 	}
 
 	return curve
+}
+
+// Trades returns all executed trades.
+func (e *Engine) Trades() []domain.Trade {
+	return e.trades
+}
+
+// TradeStats returns aggregated trade statistics.
+func (e *Engine) TradeStats() TradeStat {
+	return NewTradeStat(e.trades)
 }

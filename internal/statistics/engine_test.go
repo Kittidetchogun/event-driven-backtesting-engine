@@ -181,3 +181,117 @@ func TestStatisticsEngineEquityCurve(t *testing.T) {
 		}
 	}
 }
+
+func TestStatisticsEngineAppendTrade(t *testing.T) {
+	engine := NewEngine()
+
+	now := time.Unix(1000, 0)
+
+	trade := domain.NewTrade(
+		1,
+		1,
+		11,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		100,
+		1,
+		now,
+	)
+
+	event := events.NewTradeExecutedEvent(trade)
+
+	err := engine.Consume(event)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	trades := engine.Trades()
+
+	if len(trades) != 1 {
+		t.Fatalf("expected 1 trade, got %d", len(trades))
+	}
+
+	if trades[0].TradeID != trade.TradeID {
+		t.Fatalf(
+			"expected trade id %d, got %d",
+			trade.TradeID,
+			trades[0].TradeID,
+		)
+	}
+}
+
+func TestStatisticsEngineTradeStats(t *testing.T) {
+	engine := NewEngine()
+
+	now := time.Unix(1000, 0)
+
+	buy := domain.NewTrade(
+		1,
+		1,
+		11,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		100,
+		1,
+		now,
+	)
+
+	sell := domain.NewTrade(
+		2,
+		1,
+		12,
+		"BTCUSDT",
+		domain.SellOrder,
+		1,
+		110,
+		1,
+		now.Add(time.Minute),
+	)
+
+	if err := engine.Consume(events.NewTradeExecutedEvent(buy)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := engine.Consume(events.NewTradeExecutedEvent(sell)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	stat := engine.TradeStats()
+
+	if stat.TotalTrades != 1 {
+		t.Fatalf(
+			"expected 1 total trade, got %d",
+			stat.TotalTrades,
+		)
+	}
+
+	if stat.ProfitableTrades != 1 {
+		t.Fatalf(
+			"expected 1 profitable trade, got %d",
+			stat.ProfitableTrades,
+		)
+	}
+
+	if stat.NetProfit != 8 {
+		t.Fatalf(
+			"expected net profit 8, got %.2f",
+			stat.NetProfit,
+		)
+	}
+
+	if stat.Winrate != 1 {
+		t.Fatalf(
+			"expected win rate 1, got %.2f",
+			stat.Winrate,
+		)
+	}
+
+	if stat.Win_Avg != 8 {
+		t.Fatalf(
+			"expected average win 8, got %.2f",
+			stat.Win_Avg,
+		)
+	}
+}

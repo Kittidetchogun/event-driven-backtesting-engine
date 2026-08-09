@@ -1,4 +1,4 @@
-package analyst
+package statistics
 
 import "event-driven-backtesting-engine/internal/domain"
 
