@@ -27,18 +27,3 @@ func (p *Performance) sharpeRatio() float64 {
 	}
 	return statistics.Mean(returns) / statistics.StdDev(returns)
 }
-func (p *Performance) maxDrawdown() float64 {
-	var maxDrawdown float64
-	var peak float64
-	var snapshots = p.stat.Snapshots()
-	for _, snapshot := range snapshots {
-		if snapshot.Equity > peak {
-			peak = snapshot.Equity
-		}
-		drawdown := (peak - snapshot.Equity) / peak
-		if drawdown > maxDrawdown {
-			maxDrawdown = drawdown
-		}
-	}
-	return maxDrawdown
-}

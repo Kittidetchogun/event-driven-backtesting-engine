@@ -53,17 +53,6 @@ func TestPerformanceSharpeRatio(t *testing.T) {
 	}
 }
 
-func TestPerformanceMaxDrawdown(t *testing.T) {
-	p := newPerformanceWithEquities(100, 120, 90, 150)
-
-	got := p.maxDrawdown()
-	expected := 0.25
-
-	if math.Abs(got-expected) > 1e-12 {
-		t.Fatalf("expected max drawdown %.2f, got %.15f", expected, got)
-	}
-}
-
 func TestPerformanceEmptySnapshots(t *testing.T) {
 	p := &Performance{stat: statistics.NewEngine()}
 
@@ -73,9 +62,5 @@ func TestPerformanceEmptySnapshots(t *testing.T) {
 
 	if got := p.sharpeRatio(); got != 0 {
 		t.Fatalf("expected sharpe ratio 0, got %.2f", got)
-	}
-
-	if got := p.maxDrawdown(); got != 0 {
-		t.Fatalf("expected max drawdown 0, got %.2f", got)
 	}
 }
