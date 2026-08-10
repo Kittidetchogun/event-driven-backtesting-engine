@@ -8,6 +8,7 @@ import (
 	"event-driven-backtesting-engine/internal/events"
 	"event-driven-backtesting-engine/internal/order"
 	"event-driven-backtesting-engine/internal/strategy"
+	"event-driven-backtesting-engine/internal/portfolio"
 )
 
 func TestStrategyToOrderManagerFlow(t *testing.T) {
@@ -16,8 +17,15 @@ func TestStrategyToOrderManagerFlow(t *testing.T) {
 
 	dispatcher := events.NewEventDispatcher()
 
+	initialPortfolio := domain.NewPortfolio(1, 10000)
+
+	portfolioEngine := portfolio.NewEngine(
+		queue,
+		initialPortfolio,
+	)
+
 	manager := order.NewManager(
-		domain.DummyPortfolioChecker{},
+		portfolioEngine,
 		queue,
 	)
 

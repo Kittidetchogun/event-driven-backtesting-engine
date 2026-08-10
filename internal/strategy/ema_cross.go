@@ -22,6 +22,7 @@ const (
 
 // EmaCross เป็นกลยุทธ์การเทรดด้วยเส้น EMA 2 เส้นตัดกัน (Fast & Slow)
 type EmaCross struct {
+	runID int
 
     fastPeriod int
     slowPeriod int
@@ -40,6 +41,10 @@ type EmaCross struct {
 
 func (e *EmaCross) SetDispatcher(d *events.EventDispatcher) {
     e.dispatcher = d
+}
+
+func (e *EmaCross) SetRunID(runID int) {
+	e.runID = runID
 }
 
 // NewEmaCross สร้าง instance ใหม่ของกลยุทธ์ EMA Cross
@@ -155,7 +160,7 @@ func (e *EmaCross) dispatchSignal(
     }
 
     event := events.NewSignalGeneratedEvent(
-        1, // TODO: Replace with Backtest RunID
+        e.runID, // TODO: Replace with Backtest RunID
         symbol,
         side,
         1, // TODO: Replace with Position Sizer

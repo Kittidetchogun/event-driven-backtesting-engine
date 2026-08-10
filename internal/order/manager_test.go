@@ -6,13 +6,21 @@ import (
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
+	"event-driven-backtesting-engine/internal/portfolio"
 )
 
 func TestOrderManagerConsume(t *testing.T) {
 	queue := events.NewEventQueue()
 
+	initialPortfolio := domain.NewPortfolio(1, 10000)
+
+	portfolioEngine := portfolio.NewEngine(
+		queue,
+		initialPortfolio,
+	)
+
 	manager := NewManager(
-		domain.DummyPortfolioChecker{},
+		portfolioEngine,
 		queue,
 	)
 

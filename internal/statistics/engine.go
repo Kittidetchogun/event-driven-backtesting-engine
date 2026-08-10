@@ -25,7 +25,6 @@ func (e *Engine) Consume(event events.Event) error {
 
 	switch event := event.(type) {
 
-	// TradeExecutedEvent
 	case events.TradeExecutedEvent:
 
 		e.trades = append(
@@ -35,14 +34,12 @@ func (e *Engine) Consume(event events.Event) error {
 
 		return nil
 
-	// PortfolioUpdatedEvent
 	case events.PortfolioUpdatedEvent:
 
 		snapshot := portfolio.NewPortfolioSnapshot(
 			event.Portfolio,
 		)
 
-		// เก็บ Portfolio History
 		e.snapshots = append(
 			e.snapshots,
 			snapshot,
@@ -50,7 +47,6 @@ func (e *Engine) Consume(event events.Event) error {
 
 		return nil
 
-	// Unsupported Event
 	default:
 
 		return fmt.Errorf(

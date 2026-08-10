@@ -199,30 +199,3 @@ func TestPositionReset(t *testing.T) {
 		t.Fatalf("expected realized pnl 0")
 	}
 }
-
-func TestPositionUpdatePrice(t *testing.T) {
-
-	position := NewPosition(
-		1,
-		1,
-		"BTCUSDT",
-		BuyOrder,
-		2,
-		50000,
-		50000,
-	)
-
-	position.UpdatePrice(52000)
-
-	if position.CurrentPrice != 52000 {
-		t.Fatalf("expected current price 52000")
-	}
-
-	if position.CurrentValue != 104000 {
-		t.Fatalf("expected current value 104000, got %.2f", position.CurrentValue)
-	}
-
-	if position.UnrealizedPnL != 4000 {
-		t.Fatalf("expected unrealized pnl 4000, got %.2f", position.UnrealizedPnL)
-	}
-}

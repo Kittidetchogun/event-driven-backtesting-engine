@@ -75,6 +75,7 @@ func main() {
 
 		if !ok {
 			fmt.Println("End of Historical Data")
+			//Backtest completed
 			break
 		}
 
@@ -95,6 +96,6 @@ func main() {
 			log.Printf("dispatch error: %v", err)
 		}
 	}
-
+	//Complete Backtest
 	fmt.Println("Event Flow Completed")
 }
