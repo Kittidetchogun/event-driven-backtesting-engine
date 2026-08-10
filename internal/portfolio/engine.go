@@ -87,3 +87,60 @@ func (e *Engine) Positions() map[string]domain.Position {
 func (e *Engine) Snapshots() []PortfolioSnapshot {
 	return e.snapshots
 }
+
+func (e *Engine) CanBuy(order domain.Order) error {
+	if order.Side != domain.BuyOrder {
+		return fmt.Errorf("order is not a buy order")
+	}
+
+	if order.Quantity <= 0 {
+		return fmt.Errorf("order quantity must be greater than zero")
+	}
+
+	// Market order ยังไม่มีราคาตอน Order Manager ทำงาน
+	// จึงยังไม่สามารถตรวจ cash requirement ได้
+	if order.Price <= 0 {
+		return nil
+	}
+
+	requiredCash := order.Quantity * order.Price
+
+	if e.portfolio.Cash < requiredCash {
+		return fmt.Errorf(
+			"insufficient cash: required=%.2f available=%.2f",
+			requiredCash,
+			e.portfolio.Cash,
+		)
+	}
+
+	return nil
+}
+
+func (e *Engine) CanSell(order domain.Order) error {
+	if order.Side != domain.SellOrder {
+		return fmt.Errorf("order is not a sell order")
+	}
+
+	if order.Quantity <= 0 {
+		return fmt.Errorf("order quantity must be greater than zero")
+	}
+
+	position, ok := e.positions[order.Symbol]
+	if !ok {
+		return fmt.Errorf(
+			"no position for symbol %s",
+			order.Symbol,
+		)
+	}
+
+	if position.Quantity < order.Quantity {
+		return fmt.Errorf(
+			"insufficient position: symbol=%s required=%.8f available=%.8f",
+			order.Symbol,
+			order.Quantity,
+			position.Quantity,
+		)
+	}
+
+	return nil
+}

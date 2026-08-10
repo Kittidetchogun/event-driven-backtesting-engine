@@ -226,3 +226,161 @@ func TestPortfolioEngine_UpdatePositionValue(t *testing.T) {
 		)
 	}
 }
+
+func TestPortfolioEngineCanBuy(t *testing.T) {
+	p := domain.NewPortfolio(1, 1000)
+
+	engine := NewEngine(
+		events.NewEventQueue(),
+		p,
+	)
+
+	order := domain.NewOrder(
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		0.01,
+		50000,
+		time.Now(),
+	)
+
+	err := engine.CanBuy(order)
+
+	if err != nil {
+		t.Fatalf("expected CanBuy to succeed, got %v", err)
+	}
+}
+
+func TestPortfolioEngineCanBuy_InsufficientCash(t *testing.T) {
+	p := domain.NewPortfolio(1, 1000)
+
+	engine := NewEngine(
+		events.NewEventQueue(),
+		p,
+	)
+
+	order := domain.NewOrder(
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		2000,
+		time.Now(),
+	)
+
+	err := engine.CanBuy(order)
+
+	if err == nil {
+		t.Fatal("expected CanBuy to fail due to insufficient cash")
+	}
+}
+
+func TestPortfolioEngineCanBuy_MarketOrder(t *testing.T) {
+	p := domain.NewPortfolio(1, 1000)
+
+	engine := NewEngine(
+		events.NewEventQueue(),
+		p,
+	)
+
+	// Market order ยังไม่มี execution price
+	order := domain.NewOrder(
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		0,
+		time.Now(),
+	)
+
+	err := engine.CanBuy(order)
+
+	if err != nil {
+		t.Fatalf("expected market order to pass, got %v", err)
+	}
+}
+
+func TestPortfolioEngineCanSell(t *testing.T) {
+	p := domain.NewPortfolio(1, 1000)
+
+	engine := NewEngine(
+		events.NewEventQueue(),
+		p,
+	)
+
+	// สร้าง position ที่มีอยู่ใน portfolio engine
+	engine.positions["BTCUSDT"] = domain.Position{
+		Symbol:   "BTCUSDT",
+		Side:     domain.BuyOrder,
+		Quantity: 1,
+	}
+
+	order := domain.NewOrder(
+		1,
+		"BTCUSDT",
+		domain.SellOrder,
+		0.5,
+		0,
+		time.Now(),
+	)
+
+	err := engine.CanSell(order)
+
+	if err != nil {
+		t.Fatalf("expected CanSell to succeed, got %v", err)
+	}
+}
+
+func TestPortfolioEngineCanSell_NoPosition(t *testing.T) {
+	p := domain.NewPortfolio(1, 1000)
+
+	engine := NewEngine(
+		events.NewEventQueue(),
+		p,
+	)
+
+	order := domain.NewOrder(
+		1,
+		"BTCUSDT",
+		domain.SellOrder,
+		1,
+		0,
+		time.Now(),
+	)
+
+	err := engine.CanSell(order)
+
+	if err == nil {
+		t.Fatal("expected CanSell to fail when no position exists")
+	}
+}
+
+func TestPortfolioEngineCanSell_InsufficientPosition(t *testing.T) {
+	p := domain.NewPortfolio(1, 1000)
+
+	engine := NewEngine(
+		events.NewEventQueue(),
+		p,
+	)
+
+	engine.positions["BTCUSDT"] = domain.Position{
+		Symbol:   "BTCUSDT",
+		Side:     domain.BuyOrder,
+		Quantity: 0.5,
+	}
+
+	order := domain.NewOrder(
+		1,
+		"BTCUSDT",
+		domain.SellOrder,
+		1,
+		0,
+		time.Now(),
+	)
+
+	err := engine.CanSell(order)
+
+	if err == nil {
+		t.Fatal("expected CanSell to fail due to insufficient position")
+	}
+}

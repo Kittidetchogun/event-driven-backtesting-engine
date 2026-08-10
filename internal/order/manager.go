@@ -5,21 +5,22 @@ import (
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
+	"event-driven-backtesting-engine/internal/portfolio"
 )
 
 type Manager struct {
-	portfolio domain.PortfolioChecker
-	queue      *events.EventQueue
+    portfolio *portfolio.Engine
+    queue     *events.EventQueue
 }
 
 func NewManager(
-	portfolio domain.PortfolioChecker,
-	queue *events.EventQueue,
+    portfolio *portfolio.Engine,
+    queue *events.EventQueue,
 ) *Manager {
-	return &Manager{
-		portfolio: portfolio,
-		queue:      queue,
-	}
+    return &Manager{
+        portfolio: portfolio,
+        queue:     queue,
+    }
 }
 
 // Consume allows Order Manager to be registered as an Event Consumer.
