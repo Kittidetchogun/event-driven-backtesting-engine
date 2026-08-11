@@ -31,11 +31,13 @@ type Runner struct {
 	queue      *events.EventQueue
 	dispatcher *events.EventDispatcher
 
-	strategy  *strategy.EmaCross
-	order     *order.Manager
-	matching  *matching.Engine
-	portfolio *portfolio.Engine
+	strategy   *strategy.EmaCross
+	order      *order.Manager
+	matching   *matching.Engine
+	portfolio  *portfolio.Engine
 	statistics *statistics.Engine
+
+	repository statistics.BacktestResultRepository
 
 	config RunnerConfig
 }
@@ -43,10 +45,15 @@ type Runner struct {
 func NewRunner(
 	config RunnerConfig,
 	candlePipeline pipeline.CandlePipeline,
+	repository statistics.BacktestResultRepository,
 ) (*Runner, error) {
 
 	if candlePipeline == nil {
 		return nil, errors.New("candle pipeline is required")
+	}
+
+	if repository == nil {
+		return nil, errors.New("backtest result repository is required")
 	}
 
 	queue := events.NewEventQueue()
@@ -77,6 +84,8 @@ func NewRunner(
 	// Statistics Engine
 	statisticsEngine := statistics.NewEngine()
 
+	statisticsEngine.SetRepository(repository)
+
 	// Strategy
 	emaCross := strategy.NewEmaCross(
 		9,
@@ -99,6 +108,7 @@ func NewRunner(
 		matching:   matchingEngine,
 		portfolio:  portfolioEngine,
 		statistics: statisticsEngine,
+		repository: repository,
 		config:     config,
 	}
 
@@ -130,6 +140,11 @@ func (r *Runner) registerHandlers() {
 
 	r.dispatcher.Register(
 		events.PortfolioUpdatedEventType,
+		r.statistics.Consume,
+	)
+
+	r.dispatcher.Register(
+		events.BacktestCompletedEventType,
 		r.statistics.Consume,
 	)
 }
@@ -169,16 +184,25 @@ func (r *Runner) Run() (statistics.BacktestResult, error) {
 			return statistics.BacktestResult{}, err
 		}
 
-		// Update portfolio valuation using current market price
+		// Update portfolio valuation using current market price.
 		r.portfolio.UpdateMarketPrices(candle)
 
-		// Process PortfolioUpdatedEvent
+		// Process PortfolioUpdatedEvent.
 		if err := r.processQueue(); err != nil {
 			return statistics.BacktestResult{}, err
 		}
 	}
 
+	// Build final backtest result.
 	result := r.buildResult()
+
+	// Phase 10.8:
+	// Publish BacktestCompletedEvent.
+	completedEvent := r.buildCompletedEvent(result)
+
+	if err := r.dispatcher.Dispatch(completedEvent); err != nil {
+		return statistics.BacktestResult{}, err
+	}
 
 	return result, nil
 }

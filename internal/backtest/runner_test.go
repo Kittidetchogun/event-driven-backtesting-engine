@@ -23,18 +23,20 @@ func (p *mockCandlePipeline) Next() (domain.Candle, bool, error) {
 }
 
 func TestRunnerRequiresPipeline(t *testing.T) {
-	_, err := NewRunner(
-		RunnerConfig{
-			RunID:          1,
-			StrategyName:   "EMA Cross",
-			Symbol:         "BTCUSDT",
-			Timeframe:      "1d",
-			InitialCapital: 10000,
-		},
-		nil,
-	)
+    runner, err := NewRunner(
+        RunnerConfig{
+            RunID:          1,
+            InitialCapital: 10000,
+        },
+        nil,
+        nil,
+    )
 
-	if err == nil {
-		t.Fatal("expected error when pipeline is nil")
-	}
+    if err == nil {
+        t.Fatal("expected error when candle pipeline is nil")
+    }
+
+    if runner != nil {
+        t.Fatal("expected nil runner")
+    }
 }

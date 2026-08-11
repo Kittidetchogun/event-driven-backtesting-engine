@@ -1,6 +1,7 @@
 package statistics
 
 import (
+	"context"
 	"fmt"
 
 	"event-driven-backtesting-engine/internal/domain"
@@ -9,8 +10,9 @@ import (
 )
 
 type Engine struct {
-	snapshots []portfolio.PortfolioSnapshot
-	trades    []domain.Trade
+	snapshots  []portfolio.PortfolioSnapshot
+	trades     []domain.Trade
+	repository BacktestResultRepository
 }
 
 func NewEngine() *Engine {
@@ -20,13 +22,17 @@ func NewEngine() *Engine {
 	}
 }
 
+func (e *Engine) SetRepository(
+	repository BacktestResultRepository,
+) {
+	e.repository = repository
+}
+
 // Consume receives events from Event Queue.
 func (e *Engine) Consume(event events.Event) error {
-
 	switch event := event.(type) {
 
 	case events.TradeExecutedEvent:
-
 		e.trades = append(
 			e.trades,
 			event.Trade,
@@ -35,7 +41,6 @@ func (e *Engine) Consume(event events.Event) error {
 		return nil
 
 	case events.PortfolioUpdatedEvent:
-
 		snapshot := portfolio.NewPortfolioSnapshot(
 			event.Portfolio,
 		)
@@ -47,8 +52,10 @@ func (e *Engine) Consume(event events.Event) error {
 
 		return nil
 
-	default:
+	case events.BacktestCompletedEvent:
+		return e.saveBacktestResult(event)
 
+	default:
 		return fmt.Errorf(
 			"unsupported event %T",
 			event,
@@ -63,7 +70,6 @@ func (e *Engine) Snapshots() []portfolio.PortfolioSnapshot {
 
 // EquityCurve returns equity history.
 func (e *Engine) EquityCurve() []float64 {
-
 	curve := make([]float64, 0, len(e.snapshots))
 
 	for _, snapshot := range e.snapshots {
@@ -84,4 +90,33 @@ func (e *Engine) Trades() []domain.Trade {
 // TradeStats returns aggregated trade statistics.
 func (e *Engine) TradeStats() TradeStat {
 	return NewTradeStat(e.trades)
+}
+
+func (e *Engine) saveBacktestResult(
+	event events.BacktestCompletedEvent,
+) error {
+
+	if e.repository == nil {
+		return fmt.Errorf(
+			"backtest result repository is not configured",
+		)
+	}
+
+	result := BacktestResult{
+		RunID:        event.RunID,
+		StrategyName: event.StrategyName,
+		Symbol:       event.Symbol,
+		Timeframe:    event.Timeframe,
+		StartDate:    event.StartDate,
+		EndDate:      event.EndDate,
+		TotalReturn:  event.TotalReturn,
+		WinRate:      event.WinRate,
+		SharpeRatio:  event.SharpeRatio,
+		MaxDrawdown:  event.MaxDrawdown,
+	}
+
+	return e.repository.SaveBacktestResult(
+		context.Background(),
+		result,
+	)
 }

@@ -1,11 +1,15 @@
 package backtest
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"event-driven-backtesting-engine/internal/domain"
+	"event-driven-backtesting-engine/internal/statistics"
 )
+
+const runID = 1
 
 type fakeCandlePipeline struct {
 	candles []domain.Candle
@@ -21,6 +25,20 @@ func (p *fakeCandlePipeline) Next() (domain.Candle, bool, error) {
 	p.index++
 
 	return candle, true, nil
+}
+
+// fakeBacktestResultRepository is used by the integration test
+// to verify that Runner persists the completed BacktestResult.
+type fakeBacktestResultRepository struct {
+	results []statistics.BacktestResult
+}
+
+func (r *fakeBacktestResultRepository) SaveBacktestResult(
+	ctx context.Context,
+	result statistics.BacktestResult,
+) error {
+	r.results = append(r.results, result)
+	return nil
 }
 
 func TestRunnerRun_Integration(t *testing.T) {
@@ -55,9 +73,13 @@ func TestRunnerRun_Integration(t *testing.T) {
 		candles: candles,
 	}
 
+	repository := &fakeBacktestResultRepository{
+		results: make([]statistics.BacktestResult, 0),
+	}
+
 	runner, err := NewRunner(
 		RunnerConfig{
-			RunID:          1,
+			RunID:          runID,
 			StrategyName:   "EMA Cross",
 			Symbol:         "BTCUSDT",
 			Timeframe:      "1d",
@@ -66,6 +88,7 @@ func TestRunnerRun_Integration(t *testing.T) {
 			InitialCapital: 10000,
 		},
 		p,
+		repository,
 	)
 	if err != nil {
 		t.Fatalf("NewRunner() error = %v", err)
@@ -139,7 +162,7 @@ func TestRunnerRun_Integration(t *testing.T) {
 	}
 
 	// -------------------------
-	// Result consistency
+	// Statistics consistency
 	// -------------------------
 
 	if len(runner.statistics.Trades()) == 0 {
@@ -152,5 +175,99 @@ func TestRunnerRun_Integration(t *testing.T) {
 
 	if result.TotalReturn == 0 {
 		t.Error("TotalReturn = 0, expected non-zero result")
+	}
+
+	// -------------------------
+	// Phase 10.7
+	// BacktestResult persistence
+	// -------------------------
+
+	if len(repository.results) != 1 {
+		t.Fatalf(
+			"saved results = %d, want 1",
+			len(repository.results),
+		)
+	}
+
+	saved := repository.results[0]
+
+	if saved.RunID != result.RunID {
+		t.Errorf(
+			"saved RunID = %d, want %d",
+			saved.RunID,
+			result.RunID,
+		)
+	}
+
+	if saved.StrategyName != result.StrategyName {
+		t.Errorf(
+			"saved StrategyName = %q, want %q",
+			saved.StrategyName,
+			result.StrategyName,
+		)
+	}
+
+	if saved.Symbol != result.Symbol {
+		t.Errorf(
+			"saved Symbol = %q, want %q",
+			saved.Symbol,
+			result.Symbol,
+		)
+	}
+
+	if saved.Timeframe != result.Timeframe {
+		t.Errorf(
+			"saved Timeframe = %q, want %q",
+			saved.Timeframe,
+			result.Timeframe,
+		)
+	}
+
+	if !saved.StartDate.Equal(result.StartDate) {
+		t.Errorf(
+			"saved StartDate = %v, want %v",
+			saved.StartDate,
+			result.StartDate,
+		)
+	}
+
+	if !saved.EndDate.Equal(result.EndDate) {
+		t.Errorf(
+			"saved EndDate = %v, want %v",
+			saved.EndDate,
+			result.EndDate,
+		)
+	}
+
+	if saved.TotalReturn != result.TotalReturn {
+		t.Errorf(
+			"saved TotalReturn = %f, want %f",
+			saved.TotalReturn,
+			result.TotalReturn,
+		)
+	}
+
+	if saved.WinRate != result.WinRate {
+		t.Errorf(
+			"saved WinRate = %f, want %f",
+			saved.WinRate,
+			result.WinRate,
+		)
+	}
+
+	if saved.SharpeRatio != result.SharpeRatio {
+		t.Errorf(
+			"saved SharpeRatio = %f, want %f",
+			saved.SharpeRatio,
+			result.SharpeRatio,
+		)
+	}
+
+	if saved.MaxDrawdown != result.MaxDrawdown {
+		t.Errorf(
+			"saved MaxDrawdown = %f, want %f",
+			saved.MaxDrawdown,
+			result.MaxDrawdown,
+		)
 	}
 }

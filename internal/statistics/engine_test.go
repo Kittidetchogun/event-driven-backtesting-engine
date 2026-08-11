@@ -1,12 +1,25 @@
 package statistics
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
 )
+
+type mockBacktestResultRepository struct {
+	result *BacktestResult
+}
+
+func (m *mockBacktestResultRepository) SaveBacktestResult(
+	ctx context.Context,
+	result BacktestResult,
+) error {
+	m.result = &result
+	return nil
+}
 
 func TestNewStatisticsEngine(t *testing.T) {
 
@@ -293,5 +306,85 @@ func TestStatisticsEngineTradeStats(t *testing.T) {
 			"expected average win 8, got %.2f",
 			stat.Win_Avg,
 		)
+	}
+}
+
+func TestStatisticsEngineConsume_BacktestCompletedEvent_SavesResult(t *testing.T) {
+	repository := &mockBacktestResultRepository{}
+
+	engine := NewEngine()
+	engine.SetRepository(repository)
+
+	startDate := time.Date(
+		2024, 1, 1,
+		0, 0, 0, 0,
+		time.UTC,
+	)
+
+	endDate := time.Date(
+		2024, 1, 31,
+		0, 0, 0, 0,
+		time.UTC,
+	)
+
+	event := events.NewBacktestCompletedEvent(
+		1,
+		"EMA Cross",
+		"BTCUSDT",
+		"1h",
+		startDate,
+		endDate,
+		0.15,
+		0.60,
+		1.25,
+		-0.10,
+	)
+
+	err := engine.Consume(event)
+	if err != nil {
+		t.Fatalf("Consume() error = %v", err)
+	}
+
+	if repository.result == nil {
+		t.Fatal("expected backtest result to be saved")
+	}
+
+	if repository.result.RunID != 1 {
+		t.Errorf(
+			"RunID = %d, expected 1",
+			repository.result.RunID,
+		)
+	}
+
+	if repository.result.TotalReturn != 0.15 {
+		t.Errorf(
+			"TotalReturn = %f, expected 0.15",
+			repository.result.TotalReturn,
+		)
+	}
+}
+
+func TestStatisticsEngineConsume_BacktestCompletedEvent_RequiresRepository(
+	t *testing.T,
+) {
+	engine := NewEngine()
+
+	event := events.NewBacktestCompletedEvent(
+		1,
+		"EMA Cross",
+		"BTCUSDT",
+		"1h",
+		time.Now(),
+		time.Now(),
+		0.10,
+		0.50,
+		1.20,
+		-0.05,
+	)
+
+	err := engine.Consume(event)
+
+	if err == nil {
+		t.Fatal("expected error when repository is not configured")
 	}
 }
