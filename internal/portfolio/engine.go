@@ -2,6 +2,7 @@ package portfolio
 
 import (
 	"fmt"
+	"time"
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
@@ -18,7 +19,6 @@ func NewEngine(
 	queue *events.EventQueue,
 	portfolio domain.Portfolio,
 ) *Engine {
-
 	return &Engine{
 		queue:     queue,
 		portfolio: portfolio,
@@ -29,8 +29,6 @@ func NewEngine(
 
 // Consume receives TradeExecutedEvent from Event Queue.
 func (e *Engine) Consume(event events.Event) error {
-
-	// 1. Event ต้องเป็น TradeExecutedEvent
 	tradeEvent, ok := event.(events.TradeExecutedEvent)
 	if !ok {
 		return fmt.Errorf("unsupported event %T", event)
@@ -38,13 +36,14 @@ func (e *Engine) Consume(event events.Event) error {
 
 	trade := tradeEvent.Trade
 
-	// 2. Update Position
+	// 1. Update Position
 	UpdatePosition(
 		e.positions,
 		e.portfolio.RunID,
 		trade,
 	)
 
+	// 2. Update Cash
 	ApplyCashUpdate(
 		&e.portfolio,
 		trade,
@@ -56,24 +55,51 @@ func (e *Engine) Consume(event events.Event) error {
 		e.positions,
 	)
 
-	// 4. Update Equity
-	UpdateEquity(&e.portfolio)
-	e.portfolio.UpdateTimestamp(trade.ExecutedTime)
-
-	snapshot := NewPortfolioSnapshot(e.portfolio)
-
-	e.snapshots = append(
-		e.snapshots,
-		snapshot,
-	)
-
-	// 5. Push PortfolioUpdatedEvent
-	portfolioEvent :=
-		events.NewPortfolioUpdatedEvent(e.portfolio)
-
-	e.queue.Push(portfolioEvent)
+	// 4. Record portfolio state
+	e.recordSnapshot(trade.ExecutedTime)
 
 	return nil
+}
+
+// UpdateMarketPrices updates the current market price of positions
+// and records the latest portfolio state.
+func (e *Engine) UpdateMarketPrices(candle domain.Candle) {
+	position, ok := e.positions[candle.Symbol]
+	if !ok {
+		return
+	}
+
+	// map[string]domain.Position stores Position as a value,
+	// so update the local copy and put it back into the map.
+	UpdatePrice(&position, candle.Close)
+	UpdateMarketValue(&position)
+
+	e.positions[candle.Symbol] = position
+
+	// Recalculate portfolio valuation.
+	UpdatePositionValue(
+		&e.portfolio,
+		e.positions,
+	)
+
+	// Record portfolio state.
+	e.recordSnapshot(candle.Timestamp)
+}
+
+// recordSnapshot is the single place responsible for creating
+// PortfolioSnapshot and publishing PortfolioUpdatedEvent.
+func (e *Engine) recordSnapshot(timestamp time.Time) {
+	UpdateEquity(&e.portfolio)
+	e.portfolio.UpdateTimestamp(timestamp)
+
+	snapshot := NewPortfolioSnapshot(e.portfolio)
+	e.snapshots = append(e.snapshots, snapshot)
+
+	portfolioEvent := events.NewPortfolioUpdatedEvent(
+		e.portfolio,
+	)
+
+	e.queue.Push(portfolioEvent)
 }
 
 func (e *Engine) Portfolio() domain.Portfolio {
@@ -97,8 +123,6 @@ func (e *Engine) CanBuy(order domain.Order) error {
 		return fmt.Errorf("order quantity must be greater than zero")
 	}
 
-	// Market order ยังไม่มีราคาตอน Order Manager ทำงาน
-	// จึงยังไม่สามารถตรวจ cash requirement ได้
 	if order.Price <= 0 {
 		return nil
 	}

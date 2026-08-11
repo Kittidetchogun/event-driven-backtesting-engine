@@ -1,5 +1,7 @@
 package statistics
 
+import "time"
+
 // Performance represents the final performance report
 // of a backtest.
 type Performance struct {
@@ -30,5 +32,32 @@ func (e *Engine) Performance() Performance {
 		LosingTrades:        tradeStat.TotalTrades - tradeStat.ProfitableTrades,
 		AverageWinningTrade: tradeStat.Win_Avg,
 		AverageLosingTrade:  tradeStat.Loss_Avg,
+	}
+}
+
+func (e *Engine) NewBacktestResult(
+	runID int,
+	strategyName string,
+	symbol string,
+	timeframe string,
+	startDate time.Time,
+	endDate time.Time,
+) BacktestResult {
+
+	performance := e.Performance()
+	equityCurve := e.EquityCurve()
+
+	return BacktestResult{
+		RunID:        runID,
+		StrategyName: strategyName,
+		Symbol:       symbol,
+		Timeframe:    timeframe,
+		StartDate:    startDate,
+		EndDate:      endDate,
+
+		TotalReturn: TotalReturn(equityCurve),
+		WinRate:     performance.WinRate,
+		SharpeRatio: performance.SharpeRatio,
+		MaxDrawdown: performance.MaxDrawdown,
 	}
 }
