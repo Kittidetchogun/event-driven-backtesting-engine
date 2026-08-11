@@ -73,3 +73,50 @@ func TestDispatcher_NilEvent(t *testing.T) {
 		t.Fatal("expected error for nil event")
 	}
 }
+
+func TestEventDispatcher_DispatchMultipleHandlers(t *testing.T) {
+	dispatcher := NewEventDispatcher()
+
+	count := 0
+
+	handler1 := func(event Event) error {
+		count++
+		return nil
+	}
+
+	handler2 := func(event Event) error {
+		count++
+		return nil
+	}
+
+	dispatcher.Register(
+		BacktestCompletedEventType,
+		handler1,
+	)
+
+	dispatcher.Register(
+		BacktestCompletedEventType,
+		handler2,
+	)
+
+	event := NewBacktestCompletedEvent(
+		1,
+		"EMA Cross",
+		"BTCUSDT",
+		"1d",
+		time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
+		0.10,
+		0.60,
+		1.20,
+		-0.05,
+	)
+
+	if err := dispatcher.Dispatch(event); err != nil {
+		t.Fatalf("Dispatch() error = %v", err)
+	}
+
+	if count != 2 {
+		t.Fatalf("handlers called = %d, want 2", count)
+	}
+}
