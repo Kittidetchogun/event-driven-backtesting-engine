@@ -10,7 +10,6 @@ import (
 	"event-driven-backtesting-engine/internal/matching"
 	"event-driven-backtesting-engine/internal/order"
 	"event-driven-backtesting-engine/internal/pipeline"
-	"event-driven-backtesting-engine/internal/portfolio"
 	"event-driven-backtesting-engine/internal/statistics"
 	"event-driven-backtesting-engine/internal/strategy"
 )
@@ -120,39 +119,43 @@ func NewRunner(
 }
 
 func (r *Runner) registerHandlers() {
+	// Signal → Order Manager
 	r.dispatcher.Register(
 		events.SignalGeneratedEventType,
 		r.order.Consume,
 	)
 
+	// Order → Matching Engine
 	r.dispatcher.Register(
 		events.OrderCreatedEventType,
 		r.matching.Consume,
 	)
 
+	// Trade → Portfolio
 	r.dispatcher.Register(
 		events.TradeExecutedEventType,
 		r.portfolio.Consume,
 	)
 
+	// Trade → Statistics
 	r.dispatcher.Register(
 		events.TradeExecutedEventType,
 		r.statistics.Consume,
 	)
 
+	// Portfolio → Statistics
 	r.dispatcher.Register(
 		events.PortfolioUpdatedEventType,
 		r.statistics.Consume,
 	)
 
-	// BacktestCompletedEvent
-	//
-	// One event can have multiple consumers.
+	// BacktestCompletedEvent → Statistics
 	r.dispatcher.Register(
 		events.BacktestCompletedEventType,
 		r.statistics.Consume,
 	)
 
+	// BacktestCompletedEvent → Dashboard
 	r.dispatcher.Register(
 		events.BacktestCompletedEventType,
 		r.dashboard.Consume,
@@ -162,7 +165,6 @@ func (r *Runner) registerHandlers() {
 func (r *Runner) processQueue() error {
 	for !r.queue.IsEmpty() {
 		event, ok := r.queue.Pop()
-
 		if !ok {
 			continue
 		}
@@ -219,7 +221,6 @@ func (r *Runner) Run() (statistics.BacktestResult, error) {
 
 func (r *Runner) buildResult() statistics.BacktestResult {
 	performance := r.statistics.Performance()
-
 	equityCurve := r.statistics.EquityCurve()
 
 	return statistics.BacktestResult{
@@ -229,7 +230,7 @@ func (r *Runner) buildResult() statistics.BacktestResult {
 		Timeframe:    r.config.Timeframe,
 
 		StartDate: r.config.StartDate,
-		EndDate:    r.config.EndDate,
+		EndDate:   r.config.EndDate,
 
 		TotalReturn: statistics.TotalReturn(equityCurve),
 		WinRate:     performance.WinRate,
