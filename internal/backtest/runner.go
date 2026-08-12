@@ -12,6 +12,7 @@ import (
 	"event-driven-backtesting-engine/internal/pipeline"
 	"event-driven-backtesting-engine/internal/statistics"
 	"event-driven-backtesting-engine/internal/strategy"
+	"event-driven-backtesting-engine/internal/portfolio"
 )
 
 type RunnerConfig struct {
