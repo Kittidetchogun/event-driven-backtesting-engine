@@ -2,6 +2,7 @@ package backtest
 
 import (
 	"context"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"event-driven-backtesting-engine/internal/pipeline"
 	"event-driven-backtesting-engine/internal/storage/postgres"
+	"event-driven-backtesting-engine/internal/statistics"
 )
 
 func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
@@ -256,6 +258,153 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	)
 
 	// ------------------------------------------------------------
+	// 11.1 Verify Performance Metrics
+	// ------------------------------------------------------------
+
+	const initialCapital = 10_000.0
+
+	if len(equityCurve) == 0 {
+		t.Fatal("E2E: equity curve is empty")
+	}
+
+	if len(snapshots) == 0 {
+		t.Fatal("E2E: portfolio snapshots are empty")
+	}
+
+	// Final equity comes from the final portfolio snapshot.
+	finalSnapshot := snapshots[len(snapshots)-1]
+	finalEquity := finalSnapshot.Equity
+
+	// Total Return
+	expectedTotalReturn :=
+		(finalEquity - initialCapital) / initialCapital
+
+	performance := runner.statistics.Performance()
+	tradeStats := runner.statistics.TradeStats()
+
+	// ------------------------------------------------------------
+	// Total Return
+	// ------------------------------------------------------------
+
+	if math.Abs(
+		result.TotalReturn-expectedTotalReturn,
+	) > 1e-9 {
+		t.Errorf(
+			"E2E: Total Return = %.10f, expected %.10f from equity curve",
+			result.TotalReturn,
+			expectedTotalReturn,
+		)
+	}
+
+	// ------------------------------------------------------------
+	// Win Rate
+	// ------------------------------------------------------------
+
+	expectedWinRate := tradeStats.Winrate
+
+	if math.Abs(
+		result.WinRate-expectedWinRate,
+	) > 1e-9 {
+		t.Errorf(
+			"E2E: Win Rate = %.10f, expected %.10f from TradeStats",
+			result.WinRate,
+			expectedWinRate,
+		)
+	}
+
+	// ------------------------------------------------------------
+	// Sharpe Ratio
+	// ------------------------------------------------------------
+
+	expectedSharpe := statistics.SharpeRatio(equityCurve)
+
+	if math.Abs(
+		result.SharpeRatio-expectedSharpe,
+	) > 1e-9 {
+		t.Errorf(
+			"E2E: Sharpe Ratio = %.10f, expected %.10f",
+			result.SharpeRatio,
+			expectedSharpe,
+		)
+	}
+
+	// ------------------------------------------------------------
+	// Maximum Drawdown
+	// ------------------------------------------------------------
+
+	expectedMaxDrawdown := statistics.MaxDrawdown(equityCurve)
+
+	if math.Abs(
+		result.MaxDrawdown-expectedMaxDrawdown,
+	) > 1e-9 {
+		t.Errorf(
+			"E2E: Max Drawdown = %.10f, expected %.10f",
+			result.MaxDrawdown,
+			expectedMaxDrawdown,
+		)
+	}
+
+	// ------------------------------------------------------------
+	// Total Trades
+	// ------------------------------------------------------------
+
+	if performance.TotalTrades != tradeStats.TotalTrades {
+		t.Errorf(
+			"E2E: Performance TotalTrades = %d, TradeStats TotalTrades = %d",
+			performance.TotalTrades,
+			tradeStats.TotalTrades,
+		)
+	}
+
+	// ------------------------------------------------------------
+	// Winning / Losing Trades
+	// ------------------------------------------------------------
+
+	expectedWinningTrades := tradeStats.ProfitableTrades
+	expectedLosingTrades :=
+		tradeStats.TotalTrades - tradeStats.ProfitableTrades
+
+	if performance.WinningTrades != expectedWinningTrades {
+		t.Errorf(
+			"E2E: WinningTrades = %d, expected %d",
+			performance.WinningTrades,
+			expectedWinningTrades,
+		)
+	}
+
+	if performance.LosingTrades != expectedLosingTrades {
+		t.Errorf(
+			"E2E: LosingTrades = %d, expected %d",
+			performance.LosingTrades,
+			expectedLosingTrades,
+		)
+	}
+
+	// ------------------------------------------------------------
+	// Average Win / Loss
+	// ------------------------------------------------------------
+
+	if math.Abs(
+		performance.AverageWinningTrade-tradeStats.Win_Avg,
+	) > 1e-9 {
+		t.Errorf(
+			"E2E: Average Winning Trade = %.10f, expected %.10f",
+			performance.AverageWinningTrade,
+			tradeStats.Win_Avg,
+		)
+	}
+
+	if math.Abs(
+		performance.AverageLosingTrade-tradeStats.Loss_Avg,
+	) > 1e-9 {
+		t.Errorf(
+			"E2E: Average Losing Trade = %.10f, expected %.10f",
+			performance.AverageLosingTrade,
+			tradeStats.Loss_Avg,
+		)
+	}
+
+	// ------------------------------------------------------------
 	// 12. Verify PostgreSQL persisted BacktestResult
 	// ------------------------------------------------------------
 
@@ -372,6 +521,8 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	t.Logf("Run ID             : %d", result.RunID)
 	t.Logf("Symbol             : %s", result.Symbol)
 	t.Logf("Timeframe          : %s", result.Timeframe)
+	t.Logf("Start Date         : %s", result.StartDate.Format("2006-01-02 15:04:05"))
+	t.Logf("End Date           : %s", result.EndDate.Format("2006-01-02 15:04:05"))
 
 	t.Log("")
 	t.Log("Backtest Activity")
@@ -382,10 +533,48 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 
 	t.Log("")
 	t.Log("Performance Summary")
+	t.Logf("Initial Capital    : $%.2f", initialCapital)
+	t.Logf("Final Equity       : $%.2f", finalEquity)
+	t.Logf("Net Profit         : $%.2f", finalEquity-initialCapital)
 	t.Logf("Total Return       : %.2f%%", result.TotalReturn*100)
 	t.Logf("Win Rate           : %.2f%%", result.WinRate*100)
 	t.Logf("Sharpe Ratio       : %.3f", result.SharpeRatio)
 	t.Logf("Max Drawdown       : %.2f%%", result.MaxDrawdown*100)
+
+	t.Log("")
+	t.Log("Trade Statistics")
+	t.Logf("Total Trades       : %d", tradeStats.TotalTrades)
+	t.Logf("Winning Trades     : %d", tradeStats.ProfitableTrades)
+	t.Logf(
+		"Losing Trades      : %d",
+		tradeStats.TotalTrades-tradeStats.ProfitableTrades,
+	)
+	t.Logf("Average Win        : $%.2f", tradeStats.Win_Avg)
+	t.Logf("Average Loss       : $%.2f", tradeStats.Loss_Avg)
+
+	// t.Log("")
+	// t.Log("Executed Trades")
+
+	// for i, trade := range trades {
+	// 	t.Logf(
+	// 		"Trade #%d: %+v",
+	// 		i+1,
+	// 		trade,
+	// 	)
+	// }
+
+	// t.Log("")
+	// t.Log("Portfolio Snapshots")
+
+	// for i, snapshot := range snapshots {
+	// 	if i == 0 || i == len(snapshots)-1 {
+	// 		t.Logf(
+	// 			"Snapshot #%d: %+v",
+	// 			i+1,
+	// 			snapshot,
+	// 		)
+	// 	}
+	// }
 
 	t.Log("")
 	t.Log("Database")

@@ -26,16 +26,12 @@ func Returns(equityCurve []float64) []float64 {
 }
 
 // TotalReturn calculates the total return of an equity curve.
-func TotalReturn(equityCurve []float64) float64 {
-
-	if len(equityCurve) < 2 {
+func TotalReturn(initialCapital float64, equityCurve []float64) float64 {
+	if initialCapital <= 0 || len(equityCurve) == 0 {
 		return 0
 	}
 
-	if equityCurve[0] == 0 {
-		return 0
-	}
+	finalEquity := equityCurve[len(equityCurve)-1]
 
-	return (equityCurve[len(equityCurve)-1] - equityCurve[0]) /
-		equityCurve[0]
+	return (finalEquity - initialCapital) / initialCapital
 }

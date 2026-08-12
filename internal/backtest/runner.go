@@ -233,7 +233,10 @@ func (r *Runner) buildResult() statistics.BacktestResult {
 		StartDate: r.config.StartDate,
 		EndDate:   r.config.EndDate,
 
-		TotalReturn: statistics.TotalReturn(equityCurve),
+		TotalReturn: statistics.TotalReturn(
+			r.config.InitialCapital,
+			equityCurve,
+		),
 		WinRate:     performance.WinRate,
 		SharpeRatio: performance.SharpeRatio,
 		MaxDrawdown: performance.MaxDrawdown,

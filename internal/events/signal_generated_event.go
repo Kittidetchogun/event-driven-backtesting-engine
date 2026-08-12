@@ -9,28 +9,31 @@ import (
 const SignalGeneratedEventType = "SignalGeneratedEvent"
 
 type SignalGeneratedEvent struct {
-	BaseEvent
+    BaseEvent
 
-	RunID      int
-	Symbol     string
-	SignalType domain.OrderSide
-	Quantity   float64
-	SignalTime time.Time
+    RunID      int
+    Symbol     string
+    SignalType domain.OrderSide
+    Quantity   float64
+    Price      float64
+    SignalTime time.Time
 }
 
 func NewSignalGeneratedEvent(
-	runID int,
-	symbol string,
-	signalType domain.OrderSide,
-	quantity float64,
-	signalTime time.Time,
+    runID int,
+    symbol string,
+    signalType domain.OrderSide,
+    quantity float64,
+    price float64,
+    signalTime time.Time,
 ) SignalGeneratedEvent {
-	return SignalGeneratedEvent{
-		BaseEvent:  NewBaseEvent(SignalGeneratedEventType, signalTime),
-		RunID:      runID,
-		Symbol:     symbol,
-		SignalType: signalType,
-		Quantity:   quantity,
-		SignalTime: signalTime,
-	}
+    return SignalGeneratedEvent{
+        BaseEvent:  NewBaseEvent(SignalGeneratedEventType, signalTime),
+        RunID:      runID,
+        Symbol:     symbol,
+        SignalType: signalType,
+        Quantity:   quantity,
+        Price:      price,
+        SignalTime: signalTime,
+    }
 }

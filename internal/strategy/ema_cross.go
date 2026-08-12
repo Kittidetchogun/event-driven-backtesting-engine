@@ -104,18 +104,20 @@ func (e *EmaCross) OnData(candle domain.Candle) {
 			case e.prevDiff <= 0 && current > 0:
 				e.Signal = BuySignal
 				e.dispatchSignal(
-					candle.Symbol,
-					candle.Timestamp,
-					domain.BuyOrder,
-				)
+				candle.Symbol,
+				candle.Close,
+				candle.Timestamp,
+				domain.BuyOrder,
+			)
 
 			case e.prevDiff >= 0 && current < 0:
 				e.Signal = SellSignal
 				e.dispatchSignal(
-					candle.Symbol,
-					candle.Timestamp,
-					domain.SellOrder,
-				)
+				candle.Symbol,
+				candle.Close,
+				candle.Timestamp,
+				domain.SellOrder,
+			)
 		}
 	}
 
@@ -152,6 +154,7 @@ func (e *EmaCross) String() string {
 
 func (e *EmaCross) dispatchSignal(
     symbol string,
+    price float64,
     timestamp time.Time,
     side domain.OrderSide,
 ) {
@@ -160,10 +163,11 @@ func (e *EmaCross) dispatchSignal(
     }
 
     event := events.NewSignalGeneratedEvent(
-        e.runID, // TODO: Replace with Backtest RunID
+        e.runID,
         symbol,
         side,
-        1, // TODO: Replace with Position Sizer
+        1,
+        price,
         timestamp,
     )
 

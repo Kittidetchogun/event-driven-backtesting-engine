@@ -36,7 +36,7 @@ func (m *Manager) Consume(event events.Event) error {
 		signal.Symbol,
 		domain.OrderSide(signal.SignalType),
 		signal.Quantity,
-		0, // Market order, Matching Engine will determine execution price.
+		signal.Price,
 		signal.SignalTime,
 	)
 
