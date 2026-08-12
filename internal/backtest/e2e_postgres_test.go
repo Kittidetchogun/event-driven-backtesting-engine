@@ -36,6 +36,47 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 		t.Skip("MARKET_DATA_INTERVAL is not set")
 	}
 
+	backtestStartStr := os.Getenv("BACKTEST_START_DATE")
+	backtestEndStr := os.Getenv("BACKTEST_END_DATE")
+
+	if backtestStartStr == "" || backtestEndStr == "" {
+		t.Fatal(
+			"BACKTEST_START_DATE and BACKTEST_END_DATE must be set",
+		)
+	}
+
+	backtestStart, err := time.Parse(
+		"2006-01-02",
+		backtestStartStr,
+	)
+	if err != nil {
+		t.Fatalf(
+			"invalid BACKTEST_START_DATE %q: %v",
+			backtestStartStr,
+			err,
+		)
+	}
+
+	backtestEnd, err := time.Parse(
+		"2006-01-02",
+		backtestEndStr,
+	)
+	if err != nil {
+		t.Fatalf(
+			"invalid BACKTEST_END_DATE %q: %v",
+			backtestEndStr,
+			err,
+		)
+	}
+
+	// ใช้ UTC เพื่อให้ query database มี timezone ที่แน่นอน
+	backtestStart = backtestStart.UTC()
+	backtestEnd = backtestEnd.Add(24*time.Hour - time.Nanosecond).UTC()
+
+	if !backtestStart.Before(backtestEnd) {
+		t.Fatal("BACKTEST_START_DATE must be before BACKTEST_END_DATE")
+	}
+
 	// ------------------------------------------------------------
 	// 1. PostgreSQL connection
 	// ------------------------------------------------------------
@@ -65,16 +106,13 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	// ------------------------------------------------------------
 	// 3. Verify PostgreSQL actually contains candles
 	// ------------------------------------------------------------
-
-	start := time.Unix(0, 0).UTC()
-	end := time.Now().UTC()
-
+	
 	candles, err := candleRepository.GetCandles(
 		ctx,
 		symbol,
 		timeframe,
-		start,
-		end,
+		backtestStart,
+		backtestEnd,
 	)
 	if err != nil {
 		t.Fatalf(
@@ -114,21 +152,21 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	}
 
 	// ------------------------------------------------------------
-	// 5. Use a limited deterministic range
+	// 5. Determine actual backtest window
 	// ------------------------------------------------------------
-	//
-	// Do not run the entire database unnecessarily.
-	// Use the first available candles as the E2E window.
-	//
 
-	const maxCandles = 500
-
-	if len(candles) > maxCandles {
-		candles = candles[:maxCandles]
+	if len(candles) == 0 {
+		t.Fatal("no candles found in selected backtest range")
 	}
 
 	testStart := candles[0].Timestamp
 	testEnd := candles[len(candles)-1].Timestamp
+
+	t.Logf(
+		"backtest range: %s -> %s",
+		testStart.Format("2006-01-02 15:04:05"),
+		testEnd.Format("2006-01-02 15:04:05"),
+	)
 
 	// ------------------------------------------------------------
 	// 6. Create Historical Candle Pipeline
