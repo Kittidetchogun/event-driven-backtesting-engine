@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"event-driven-backtesting-engine/internal/events"
+	"event-driven-backtesting-engine/internal/domain"
 )
 
 func TestConsumerConsume_BacktestCompletedEvent(t *testing.T) {
@@ -94,10 +95,19 @@ func TestConsumerConsume_BacktestCompletedEvent(t *testing.T) {
 func TestConsumerConsume_UnsupportedEvent(t *testing.T) {
 	consumer := NewConsumer()
 
-	event := events.NewTradeExecutedEvent(
-		// ใช้ constructor/signature ของ TradeExecutedEvent
-		// ที่มีอยู่ในโปรเจกต์ของคุณ
-	)
+	trade := domain.NewTrade(
+        1,
+        1,
+        1,
+        "BTCUSDT",
+        domain.BuyOrder,
+        1,
+        50000,
+        10,
+        time.Now(),
+    )
+
+    event := events.NewTradeExecutedEvent(trade)
 
 	if err := consumer.Consume(event); err == nil {
 		t.Fatal("expected error for unsupported event")

@@ -260,18 +260,71 @@ func TestBacktestEndToEnd(t *testing.T) {
 	}
 
 	// ------------------------------------------------------------
-	// 9. Verify performance metrics were calculated
+	// 9. Verify performance metrics
 	// ------------------------------------------------------------
 
 	performance := runner.statistics.Performance()
 
-	// We don't require every metric to be non-zero because
-	// a deterministic test dataset can legitimately produce
-	// zero Sharpe or drawdown.
-	//
-	// We only verify that Performance() can be calculated
-	// without causing the E2E flow to fail.
-	_ = performance
+	if performance.WinRate < 0 || performance.WinRate > 1 {
+		t.Errorf(
+			"E2E: WinRate = %.8f, want value between 0 and 1",
+			performance.WinRate,
+		)
+	}
+
+	if performance.SharpeRatio != performance.SharpeRatio {
+		t.Error("E2E: SharpeRatio is NaN")
+	}
+
+	if performance.MaxDrawdown < 0 {
+		t.Errorf(
+			"E2E: MaxDrawdown = %.8f, want >= 0",
+			performance.MaxDrawdown,
+		)
+	}
+
+	if performance.TotalTrades < 0 {
+		t.Errorf(
+			"E2E: TotalTrades = %d, want >= 0",
+			performance.TotalTrades,
+		)
+	}
+
+	if performance.WinningTrades < 0 {
+		t.Errorf(
+			"E2E: WinningTrades = %d, want >= 0",
+			performance.WinningTrades,
+		)
+	}
+
+	if performance.LosingTrades < 0 {
+		t.Errorf(
+			"E2E: LosingTrades = %d, want >= 0",
+			performance.LosingTrades,
+		)
+	}
+
+	if performance.WinningTrades+performance.LosingTrades != performance.TotalTrades {
+		t.Errorf(
+			"E2E: winning + losing = %d, total trades = %d",
+			performance.WinningTrades+performance.LosingTrades,
+			performance.TotalTrades,
+		)
+	}
+
+	if performance.TotalTrades > 0 {
+		if performance.WinningTrades > 0 && performance.AverageWinningTrade == 0 {
+			t.Errorf(
+				"E2E: expected non-zero AverageWinningTrade",
+			)
+		}
+
+		if performance.LosingTrades > 0 && performance.AverageLosingTrade == 0 {
+			t.Errorf(
+				"E2E: expected non-zero AverageLosingTrade",
+			)
+		}
+	}
 
 	// ------------------------------------------------------------
 	// 10. Verify BacktestCompletedEvent persistence
