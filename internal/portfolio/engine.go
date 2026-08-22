@@ -36,26 +36,46 @@ func (e *Engine) Consume(event events.Event) error {
 
 	trade := tradeEvent.Trade
 
-	// 1. Update Position
+	// Capture the existing position before updating it.
+	// This is required to calculate realized PnL using
+	// the position's average entry price.
+	position, hasPosition := e.positions[trade.Symbol]
+
+	// 1. Update realized PnL before position may be deleted.
+	if hasPosition {
+		ApplyRealizedPnL(
+			&e.portfolio,
+			position,
+			trade,
+		)
+	}
+
+	// 2. Update Position
 	UpdatePosition(
 		e.positions,
 		e.portfolio.RunID,
 		trade,
 	)
 
-	// 2. Update Cash
+	// 3. Update Cash
 	ApplyCashUpdate(
 		&e.portfolio,
 		trade,
 	)
 
-	// 3. Update Position Value
+	// 4. Update Position Value
 	UpdatePositionValue(
 		&e.portfolio,
 		e.positions,
 	)
 
-	// 4. Record portfolio state
+	// 5. Update portfolio-level Unrealized PnL
+	UpdatePortfolioUnrealizedPnL(
+		&e.portfolio,
+		e.positions,
+	)
+
+	// 6. Record portfolio state
 	e.recordSnapshot(trade.ExecutedTime)
 
 	return nil
@@ -69,15 +89,20 @@ func (e *Engine) UpdateMarketPrices(candle domain.Candle) {
 		return
 	}
 
-	// map[string]domain.Position stores Position as a value,
-	// so update the local copy and put it back into the map.
 	UpdatePrice(&position, candle.Close)
 	UpdateMarketValue(&position)
+	UpdateUnrealizedPnL(&position)
 
 	e.positions[candle.Symbol] = position
 
 	// Recalculate portfolio valuation.
 	UpdatePositionValue(
+		&e.portfolio,
+		e.positions,
+	)
+
+	// Recalculate portfolio-level unrealized PnL.
+	UpdatePortfolioUnrealizedPnL(
 		&e.portfolio,
 		e.positions,
 	)

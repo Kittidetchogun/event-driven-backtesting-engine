@@ -166,7 +166,7 @@ func (e *EmaCross) dispatchSignal(
         e.runID,
         symbol,
         side,
-        1,
+        1, // refactor ในอนาคต เพราะข้อมูลซ้ำซ้อน
         price,
         timestamp,
     )

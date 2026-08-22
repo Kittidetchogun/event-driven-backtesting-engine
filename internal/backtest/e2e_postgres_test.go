@@ -128,11 +128,6 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 		)
 	}
 
-	t.Logf(
-		"loaded %d candles from PostgreSQL",
-		len(candles),
-	)
-
 	// ------------------------------------------------------------
 	// 4. Verify chronological ordering
 	// ------------------------------------------------------------
@@ -161,12 +156,6 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 
 	testStart := candles[0].Timestamp
 	testEnd := candles[len(candles)-1].Timestamp
-
-	t.Logf(
-		"backtest range: %s -> %s",
-		testStart.Format("2006-01-02 15:04:05"),
-		testEnd.Format("2006-01-02 15:04:05"),
-	)
 
 	// ------------------------------------------------------------
 	// 6. Create Historical Candle Pipeline
@@ -279,21 +268,6 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	snapshots := runner.portfolio.Snapshots()
 
 	equityCurve := runner.statistics.EquityCurve()
-
-	t.Logf(
-		"executed trades: %d",
-		len(trades),
-	)
-
-	t.Logf(
-		"portfolio snapshots: %d",
-		len(snapshots),
-	)
-
-	t.Logf(
-		"equity curve points: %d",
-		len(equityCurve),
-	)
 
 	// ------------------------------------------------------------
 	// 11.1 Verify Performance Metrics
@@ -590,29 +564,29 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	t.Logf("Average Win        : $%.2f", tradeStats.Win_Avg)
 	t.Logf("Average Loss       : $%.2f", tradeStats.Loss_Avg)
 
-	// t.Log("")
-	// t.Log("Executed Trades")
+	t.Log("")
+	t.Log("Executed Trades")
 
-	// for i, trade := range trades {
-	// 	t.Logf(
-	// 		"Trade #%d: %+v",
-	// 		i+1,
-	// 		trade,
-	// 	)
-	// }
+	for i, trade := range trades {
+		t.Logf(
+			"Trade #%d: %+v",
+			i+1,
+			trade,
+		)
+	}
 
-	// t.Log("")
-	// t.Log("Portfolio Snapshots")
+	t.Log("")
+	t.Log("Portfolio Snapshots")
 
-	// for i, snapshot := range snapshots {
-	// 	if i == 0 || i == len(snapshots)-1 {
-	// 		t.Logf(
-	// 			"Snapshot #%d: %+v",
-	// 			i+1,
-	// 			snapshot,
-	// 		)
-	// 	}
-	// }
+	for i, snapshot := range snapshots {
+		if i == 0 || i == len(snapshots)-1 {
+			t.Logf(
+				"Snapshot #%d: %+v",
+				i+1,
+				snapshot,
+			)
+		}
+	}
 
 	t.Log("")
 	t.Log("Database")

@@ -10,9 +10,10 @@ import (
 	"event-driven-backtesting-engine/internal/matching"
 	"event-driven-backtesting-engine/internal/order"
 	"event-driven-backtesting-engine/internal/pipeline"
+	"event-driven-backtesting-engine/internal/portfolio"
+	"event-driven-backtesting-engine/internal/sizing"
 	"event-driven-backtesting-engine/internal/statistics"
 	"event-driven-backtesting-engine/internal/strategy"
-	"event-driven-backtesting-engine/internal/portfolio"
 )
 
 type RunnerConfig struct {
@@ -70,10 +71,14 @@ func NewRunner(
 		initialPortfolio,
 	)
 
+	// Position Sizing
+	sizer := sizing.NewFixedFractional(0.10)
+
 	// Order Manager
 	orderManager := order.NewManager(
 		portfolioEngine,
 		queue,
+		sizer,
 	)
 
 	// Matching Engine

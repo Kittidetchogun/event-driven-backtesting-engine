@@ -14,14 +14,17 @@ func UpdatePosition(
 	// ---------- Create ----------
 	if !exists && trade.Side == domain.BuyOrder {
 
+		costBasis := trade.ExecutedPrice*trade.Quantity + trade.TransactionCost
+		averagePrice := costBasis / trade.Quantity
+
 		position = domain.NewPosition(
-			1, // TODO: Generate PositionID
+			1,
 			portfolioID,
 			trade.Symbol,
 			trade.Side,
 			trade.Quantity,
-			trade.ExecutedPrice,
-			trade.ExecutedPrice,
+			averagePrice,
+			averagePrice,
 		)
 
 		positions[trade.Symbol] = position
@@ -33,7 +36,8 @@ func UpdatePosition(
 
 		totalCost :=
 			position.AveragePrice*position.Quantity +
-				trade.ExecutedPrice*trade.Quantity
+				trade.ExecutedPrice*trade.Quantity +
+				trade.TransactionCost
 
 		position.Quantity += trade.Quantity
 

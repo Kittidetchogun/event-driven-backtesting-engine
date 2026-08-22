@@ -6,20 +6,24 @@ import (
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
 	"event-driven-backtesting-engine/internal/portfolio"
+	"event-driven-backtesting-engine/internal/sizing"
 )
 
 type Manager struct {
     portfolio *portfolio.Engine
     queue     *events.EventQueue
+    sizer     sizing.Sizer
 }
 
 func NewManager(
     portfolio *portfolio.Engine,
     queue *events.EventQueue,
+    sizer sizing.Sizer,
 ) *Manager {
     return &Manager{
         portfolio: portfolio,
         queue:     queue,
+        sizer:     sizer,
     }
 }
 
@@ -31,11 +35,18 @@ func (m *Manager) Consume(event events.Event) error {
 		return fmt.Errorf("unsupported event %T", event)
 	}
 
+	p := m.portfolio.Portfolio()
+
+	quantity := m.sizer.Size(
+		p.Equity,
+		signal.Price,
+	)
+
 	order := domain.NewOrder(
 		signal.RunID,
 		signal.Symbol,
 		domain.OrderSide(signal.SignalType),
-		signal.Quantity,
+		quantity,
 		signal.Price,
 		signal.SignalTime,
 	)

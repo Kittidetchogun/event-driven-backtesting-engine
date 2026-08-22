@@ -7,6 +7,7 @@ import (
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
 	"event-driven-backtesting-engine/internal/portfolio"
+	"event-driven-backtesting-engine/internal/sizing"
 )
 
 func TestOrderManagerConsume(t *testing.T) {
@@ -19,9 +20,12 @@ func TestOrderManagerConsume(t *testing.T) {
 		initialPortfolio,
 	)
 
+	sizer := sizing.NewFixedFractional(0.10)
+
 	manager := NewManager(
 		portfolioEngine,
 		queue,
+		sizer,
 	)
 
 	signal := events.NewSignalGeneratedEvent(
@@ -29,6 +33,7 @@ func TestOrderManagerConsume(t *testing.T) {
 		"BTCUSDT",       // Symbol
 		domain.BuyOrder, // SignalType
 		1,               // Quantity
+		100000,          // Price
 		time.Now(),      // SignalTime
 	)
 
@@ -60,5 +65,12 @@ func TestOrderManagerConsume(t *testing.T) {
 
 	if orderEvent.Order.Status != domain.PendingOrder {
 		t.Fatalf("expected status PENDING got %s", orderEvent.Order.Status)
+	}
+
+	if orderEvent.Order.Quantity != 0.01 {
+		t.Fatalf(
+			"expected quantity 0.01 got %.8f",
+			orderEvent.Order.Quantity,
+		)
 	}
 }
