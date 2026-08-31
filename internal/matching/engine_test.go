@@ -9,12 +9,10 @@ import (
 )
 
 func TestMatchingEngineConsume(t *testing.T) {
-
 	queue := events.NewEventQueue()
-
 	engine := NewEngine(queue)
 
-	order := domain.NewOrder(
+	order1 := domain.NewOrder(
 		1,
 		"BTCUSDT",
 		domain.BuyOrder,
@@ -23,9 +21,9 @@ func TestMatchingEngineConsume(t *testing.T) {
 		time.Now(),
 	)
 
-	orderEvent := events.NewOrderCreatedEvent(order)
+	orderEvent1 := events.NewOrderCreatedEvent(order1)
 
-	if err := engine.Consume(orderEvent); err != nil {
+	if err := engine.Consume(orderEvent1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -45,24 +43,34 @@ func TestMatchingEngineConsume(t *testing.T) {
 
 	trade := tradeEvent.Trade
 
-	if trade.Symbol != order.Symbol {
-		t.Fatalf("expected symbol %s got %s", order.Symbol, trade.Symbol)
+	if trade.TradeID != 1 {
+		t.Fatalf("expected trade ID 1, got %d", trade.TradeID)
 	}
 
-	if trade.Side != order.Side {
-		t.Fatalf("expected side %s got %s", order.Side, trade.Side)
+	if trade.Symbol != order1.Symbol {
+		t.Fatalf("expected symbol %s got %s",
+			order1.Symbol,
+			trade.Symbol,
+		)
 	}
 
-	if trade.Quantity != order.Quantity {
+	if trade.Side != order1.Side {
+		t.Fatalf("expected side %s got %s",
+			order1.Side,
+			trade.Side,
+		)
+	}
+
+	if trade.Quantity != order1.Quantity {
 		t.Fatalf("expected quantity %.2f got %.2f",
-			order.Quantity,
+			order1.Quantity,
 			trade.Quantity,
 		)
 	}
 
-	if trade.ExecutedPrice != order.Price {
+	if trade.ExecutedPrice != order1.Price {
 		t.Fatalf("expected executed price %.2f got %.2f",
-			order.Price,
+			order1.Price,
 			trade.ExecutedPrice,
 		)
 	}
@@ -71,25 +79,59 @@ func TestMatchingEngineConsume(t *testing.T) {
 		t.Fatalf("expected 1 trade, got %d", len(engine.Trades()))
 	}
 
-	storedTrade := engine.Trades()[0]
+	// -------------------------------------------------
+	// Second order -> should generate TradeID = 2
+	// -------------------------------------------------
 
-	if storedTrade.Symbol != "BTCUSDT" {
-		t.Fatalf("expected BTCUSDT, got %s", storedTrade.Symbol)
+	order2 := domain.NewOrder(
+		2,
+		"BTCUSDT",
+		domain.SellOrder,
+		1,
+		51000,
+		time.Now().Add(time.Minute),
+	)
+
+	orderEvent2 := events.NewOrderCreatedEvent(order2)
+
+	if err := engine.Consume(orderEvent2); err != nil {
+		t.Fatal(err)
 	}
 
-	if storedTrade.Side != domain.BuyOrder {
-		t.Fatalf("expected BUY")
+	if queue.Len() != 1 {
+		t.Fatalf("expected queue length 1 got %d", queue.Len())
 	}
 
-	if storedTrade.ExecutedPrice != order.Price {
-		t.Fatalf("unexpected executed price")
+	event, ok = queue.Pop()
+	if !ok {
+		t.Fatal("expected second event")
 	}
 
-	if storedTrade.ExecutedPrice != order.Price {
-		t.Fatalf(
-			"expected %.2f got %.2f",
-			order.Price,
-			storedTrade.ExecutedPrice,
-		)
+	tradeEvent, ok = event.(events.TradeExecutedEvent)
+	if !ok {
+		t.Fatal("expected second TradeExecutedEvent")
+	}
+
+	trade2 := tradeEvent.Trade
+
+	if trade2.TradeID != 2 {
+		t.Fatalf("expected trade ID 2, got %d", trade2.TradeID)
+	}
+
+	if len(engine.Trades()) != 2 {
+		t.Fatalf("expected 2 trades, got %d", len(engine.Trades()))
+	}
+
+	// Verify stored trades
+	storedTrades := engine.Trades()
+
+	if storedTrades[0].TradeID != 1 {
+		t.Fatalf("expected first trade ID 1, got %d",
+			storedTrades[0].TradeID)
+	}
+
+	if storedTrades[1].TradeID != 2 {
+		t.Fatalf("expected second trade ID 2, got %d",
+			storedTrades[1].TradeID)
 	}
 }
