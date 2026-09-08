@@ -137,6 +137,14 @@ func (r *Runner) registerHandlers() {
 		r.matching.Consume,
 	)
 
+	// OrderRejectedEvent → continue backtest
+	r.dispatcher.Register(
+		events.OrderRejectedEventType,
+		func(event events.Event) error {
+			return nil
+		},
+	)
+
 	// Trade → Portfolio
 	r.dispatcher.Register(
 		events.TradeExecutedEventType,

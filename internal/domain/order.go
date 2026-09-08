@@ -30,19 +30,31 @@ const (
 	PendingOrder   OrderStatus = "PENDING"
 	FilledOrder    OrderStatus = "FILLED"
 	CancelledOrder OrderStatus = "CANCELLED"
+	RejectedOrder OrderStatus = "REJECTED"
+)
+
+type OrderRejectReason string
+
+const (
+	InsufficientCash    OrderRejectReason = "INSUFFICIENT_CASH"
+	InsufficientPosition OrderRejectReason = "INSUFFICIENT_POSITION"
+	NoPosition          OrderRejectReason = "NO_POSITION"
 )
 
 type Order struct {
-	ID OrderID
-	RunID int
-	Symbol string
-	Side OrderSide
-	Type OrderType
-	Quantity float64
-	Price float64
-	Status OrderStatus
+	ID        OrderID
+	RunID     int
+	Symbol    string
+	Side      OrderSide
+	Type      OrderType
+	Quantity  float64
+	Price     float64
+	Status    OrderStatus
 	CreatedAt time.Time
-	FilledAt *time.Time
+	FilledAt  *time.Time
+
+	RejectReason string
+	RejectedAt   *time.Time
 }
 
 // NewOrder creates a new pending market order.
@@ -85,6 +97,18 @@ func (o *Order) Cancel() error {
 	}
 
 	o.Status = CancelledOrder
+
+	return nil
+}
+
+func (o *Order) Reject(reason string, rejectedAt time.Time) error {
+	if o.Status != PendingOrder {
+		return ErrOrderNotPending
+	}
+
+	o.Status = RejectedOrder
+	o.RejectReason = reason
+	o.RejectedAt = &rejectedAt
 
 	return nil
 }

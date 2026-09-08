@@ -1,6 +1,7 @@
 package order
 
 import (
+	"errors"
 	"fmt"
 
 	"event-driven-backtesting-engine/internal/domain"
@@ -56,14 +57,43 @@ func (m *Manager) Consume(event events.Event) error {
 	}
 
 	switch order.Side {
-
 	case domain.BuyOrder:
 		if err := m.portfolio.CanBuy(order); err != nil {
+			if errors.Is(err, portfolio.ErrInsufficientCash) {
+				reason := err.Error()
+
+				if err := order.Reject(reason, signal.SignalTime); err != nil {
+					return err
+				}
+
+				m.queue.Push(
+					events.NewOrderRejectedEvent(order, reason),
+				)
+
+				return nil
+			}
+
 			return err
 		}
 
 	case domain.SellOrder:
 		if err := m.portfolio.CanSell(order); err != nil {
+			if errors.Is(err, portfolio.ErrNoPosition) ||
+				errors.Is(err, portfolio.ErrInsufficientPosition) {
+
+				reason := err.Error()
+
+				if err := order.Reject(reason, signal.SignalTime); err != nil {
+					return err
+				}
+
+				m.queue.Push(
+					events.NewOrderRejectedEvent(order, reason),
+				)
+
+				return nil
+			}
+
 			return err
 		}
 	}

@@ -1,11 +1,18 @@
 package portfolio
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
+)
+
+var (
+	ErrInsufficientCash     = errors.New("insufficient cash")
+	ErrNoPosition           = errors.New("no position")
+	ErrInsufficientPosition = errors.New("insufficient position")
 )
 
 type Engine struct {
@@ -156,7 +163,8 @@ func (e *Engine) CanBuy(order domain.Order) error {
 
 	if e.portfolio.Cash < requiredCash {
 		return fmt.Errorf(
-			"insufficient cash: required=%.2f available=%.2f",
+			"%w: required=%.2f available=%.2f",
+			ErrInsufficientCash,
 			requiredCash,
 			e.portfolio.Cash,
 		)
@@ -177,14 +185,16 @@ func (e *Engine) CanSell(order domain.Order) error {
 	position, ok := e.positions[order.Symbol]
 	if !ok {
 		return fmt.Errorf(
-			"no position for symbol %s",
+			"%w: symbol=%s",
+			ErrNoPosition,
 			order.Symbol,
 		)
 	}
 
 	if position.Quantity < order.Quantity {
 		return fmt.Errorf(
-			"insufficient position: symbol=%s required=%.8f available=%.8f",
+			"%w: symbol=%s required=%.8f available=%.8f",
+			ErrInsufficientPosition,
 			order.Symbol,
 			order.Quantity,
 			position.Quantity,

@@ -158,3 +158,199 @@ func TestOrderManagerSizingUsesSignalPrice(t *testing.T) {
 		)
 	}
 }
+
+func TestOrderManagerRejectsBuyWhenInsufficientCash(t *testing.T) {
+	queue := events.NewEventQueue()
+
+	initialPortfolio := domain.NewPortfolio(1, 100)
+	initialPortfolio.Cash = 5
+
+	portfolioEngine := portfolio.NewEngine(
+		queue,
+		initialPortfolio,
+	)
+
+	sizer := sizing.NewFixedFractional(0.10)
+
+	manager := NewManager(
+		portfolioEngine,
+		queue,
+		sizer,
+	)
+
+	signalTime := time.Date(
+		2026, 8, 12, 0, 0, 0, 0,
+		time.UTC,
+	)
+
+	signal := events.NewSignalGeneratedEvent(
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		1000,
+		signalTime,
+	)
+
+	if err := manager.Consume(signal); err != nil {
+		t.Fatalf("expected rejection to be handled without error, got %v", err)
+	}
+
+	if queue.Len() != 1 {
+		t.Fatalf("expected 1 event, got %d", queue.Len())
+	}
+
+	event, ok := queue.Pop()
+	if !ok {
+		t.Fatal("expected OrderRejectedEvent")
+	}
+
+	rejectedEvent, ok := event.(events.OrderRejectedEvent)
+	if !ok {
+		t.Fatalf(
+			"expected OrderRejectedEvent, got %T",
+			event,
+		)
+	}
+
+	if rejectedEvent.Order.Status != domain.RejectedOrder {
+		t.Fatalf(
+			"expected status REJECTED, got %s",
+			rejectedEvent.Order.Status,
+		)
+	}
+
+	if rejectedEvent.Reason == "" {
+		t.Fatal("expected rejection reason")
+	}
+
+	if rejectedEvent.Order.RejectReason == "" {
+		t.Fatal("expected Order.RejectReason")
+	}
+
+	if rejectedEvent.Order.RejectedAt == nil {
+		t.Fatal("expected Order.RejectedAt")
+	}
+}
+
+func TestOrderManagerRejectsSellWhenNoPosition(t *testing.T) {
+	queue := events.NewEventQueue()
+
+	initialPortfolio := domain.NewPortfolio(1, 10000)
+
+	portfolioEngine := portfolio.NewEngine(
+		queue,
+		initialPortfolio,
+	)
+
+	sizer := sizing.NewFixedFractional(0.10)
+
+	manager := NewManager(
+		portfolioEngine,
+		queue,
+		sizer,
+	)
+
+	signalTime := time.Date(
+		2026, 8, 12, 0, 0, 0, 0,
+		time.UTC,
+	)
+
+	signal := events.NewSignalGeneratedEvent(
+		1,
+		"BTCUSDT",
+		domain.SellOrder,
+		1,
+		100000,
+		signalTime,
+	)
+
+	if err := manager.Consume(signal); err != nil {
+		t.Fatalf("expected rejection to be handled without error, got %v", err)
+	}
+
+	if queue.Len() != 1 {
+		t.Fatalf("expected 1 event, got %d", queue.Len())
+	}
+
+	event, ok := queue.Pop()
+	if !ok {
+		t.Fatal("expected OrderRejectedEvent")
+	}
+
+	rejectedEvent, ok := event.(events.OrderRejectedEvent)
+	if !ok {
+		t.Fatalf(
+			"expected OrderRejectedEvent, got %T",
+			event,
+		)
+	}
+
+	if rejectedEvent.Order.Status != domain.RejectedOrder {
+		t.Fatalf(
+			"expected status REJECTED, got %s",
+			rejectedEvent.Order.Status,
+		)
+	}
+
+	if rejectedEvent.Reason == "" {
+		t.Fatal("expected rejection reason")
+	}
+
+	if rejectedEvent.Order.RejectReason == "" {
+		t.Fatal("expected Order.RejectReason")
+	}
+
+	if rejectedEvent.Order.RejectedAt == nil {
+		t.Fatal("expected Order.RejectedAt")
+	}
+}
+
+func TestOrderManagerDoesNotCreateOrderEventWhenRejected(t *testing.T) {
+	queue := events.NewEventQueue()
+
+	initialPortfolio := domain.NewPortfolio(1, 100)
+	initialPortfolio.Cash = 5
+
+	portfolioEngine := portfolio.NewEngine(
+		queue,
+		initialPortfolio,
+	)
+
+	sizer := sizing.NewFixedFractional(0.10)
+
+	manager := NewManager(
+		portfolioEngine,
+		queue,
+		sizer,
+	)
+
+	signal := events.NewSignalGeneratedEvent(
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		1000,
+		time.Now(),
+	)
+
+	if err := manager.Consume(signal); err != nil {
+		t.Fatalf("expected rejection to be handled, got %v", err)
+	}
+
+	event, ok := queue.Pop()
+	if !ok {
+		t.Fatal("expected rejection event")
+	}
+
+	if _, ok := event.(events.OrderCreatedEvent); ok {
+		t.Fatal("rejected order must not create OrderCreatedEvent")
+	}
+
+	if _, ok := event.(events.OrderRejectedEvent); !ok {
+		t.Fatalf(
+			"expected OrderRejectedEvent, got %T",
+			event,
+		)
+	}
+}
