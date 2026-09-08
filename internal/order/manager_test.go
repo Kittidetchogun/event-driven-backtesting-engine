@@ -354,3 +354,107 @@ func TestOrderManagerDoesNotCreateOrderEventWhenRejected(t *testing.T) {
 		)
 	}
 }
+
+func TestOrderManagerEmitsExplicitOrderRejectedEvent(t *testing.T) {
+	queue := events.NewEventQueue()
+
+	initialPortfolio := domain.NewPortfolio(1, 100)
+	initialPortfolio.Cash = 5
+
+	portfolioEngine := portfolio.NewEngine(
+		queue,
+		initialPortfolio,
+	)
+
+	sizer := sizing.NewFixedFractional(0.10)
+
+	manager := NewManager(
+		portfolioEngine,
+		queue,
+		sizer,
+	)
+
+	signalTime := time.Date(
+		2026, 8, 12, 0, 0, 0, 0,
+		time.UTC,
+	)
+
+	signal := events.NewSignalGeneratedEvent(
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		1000,
+		signalTime,
+	)
+
+	if err := manager.Consume(signal); err != nil {
+		t.Fatalf(
+			"expected rejection to be handled without error, got %v",
+			err,
+		)
+	}
+
+	event, ok := queue.Pop()
+	if !ok {
+		t.Fatal("expected OrderRejectedEvent")
+	}
+
+	rejectedEvent, ok := event.(events.OrderRejectedEvent)
+	if !ok {
+		t.Fatalf(
+			"expected OrderRejectedEvent, got %T",
+			event,
+		)
+	}
+
+	if rejectedEvent.Type() != events.OrderRejectedEventType {
+		t.Fatalf(
+			"expected event type %s, got %s",
+			events.OrderRejectedEventType,
+			rejectedEvent.Type(),
+		)
+	}
+
+	if rejectedEvent.Order.Status != domain.RejectedOrder {
+		t.Fatalf(
+			"expected order status REJECTED, got %s",
+			rejectedEvent.Order.Status,
+		)
+	}
+
+	if rejectedEvent.Reason == "" {
+		t.Fatal("expected explicit rejection reason")
+	}
+
+	if rejectedEvent.Order.RejectReason == "" {
+		t.Fatal("expected Order.RejectReason")
+	}
+
+	if rejectedEvent.Order.RejectedAt == nil {
+		t.Fatal("expected Order.RejectedAt")
+	}
+
+	if !rejectedEvent.Order.RejectedAt.Equal(signalTime) {
+		t.Fatalf(
+			"expected RejectedAt=%v, got %v",
+			signalTime,
+			*rejectedEvent.Order.RejectedAt,
+		)
+	}
+
+	// Display rejection result clearly in test output.
+	t.Log("========================================")
+	t.Log("ORDER REJECTION RESULT")
+	t.Log("========================================")
+	t.Logf("Event Type       : %s", rejectedEvent.Type())
+	t.Logf("Symbol           : %s", rejectedEvent.Order.Symbol)
+	t.Logf("Side             : %s", rejectedEvent.Order.Side)
+	t.Logf("Order Status     : %s", rejectedEvent.Order.Status)
+	t.Logf("Order Quantity   : %.8f", rejectedEvent.Order.Quantity)
+	t.Logf("Order Price      : %.2f", rejectedEvent.Order.Price)
+	t.Logf("Reason           : %s", rejectedEvent.Reason)
+	t.Logf("Order RejectReason: %s", rejectedEvent.Order.RejectReason)
+	t.Logf("Rejected At      : %v", *rejectedEvent.Order.RejectedAt)
+	t.Log("========================================")
+}
