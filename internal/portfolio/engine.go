@@ -86,27 +86,25 @@ func (e *Engine) Consume(event events.Event) error {
 // and records the latest portfolio state.
 func (e *Engine) UpdateMarketPrices(candle domain.Candle) {
 	position, ok := e.positions[candle.Symbol]
-	if !ok {
-		return
+	if ok {
+		UpdatePrice(&position, candle.Close)
+		UpdateMarketValue(&position)
+		UpdateUnrealizedPnL(&position)
+
+		e.positions[candle.Symbol] = position
+
+		// Recalculate portfolio valuation.
+		UpdatePositionValue(
+			&e.portfolio,
+			e.positions,
+		)
+
+		// Recalculate portfolio-level unrealized PnL.
+		UpdatePortfolioUnrealizedPnL(
+			&e.portfolio,
+			e.positions,
+		)
 	}
-
-	UpdatePrice(&position, candle.Close)
-	UpdateMarketValue(&position)
-	UpdateUnrealizedPnL(&position)
-
-	e.positions[candle.Symbol] = position
-
-	// Recalculate portfolio valuation.
-	UpdatePositionValue(
-		&e.portfolio,
-		e.positions,
-	)
-
-	// Recalculate portfolio-level unrealized PnL.
-	UpdatePortfolioUnrealizedPnL(
-		&e.portfolio,
-		e.positions,
-	)
 
 	// Record portfolio state.
 	e.recordSnapshot(candle.Timestamp)
@@ -126,6 +124,10 @@ func (e *Engine) recordSnapshot(timestamp time.Time) {
 	)
 
 	e.queue.Push(portfolioEvent)
+
+}
+func (e *Engine) RecordSnapshot(timestamp time.Time) {
+	e.recordSnapshot(timestamp)
 }
 
 func (e *Engine) Portfolio() domain.Portfolio {

@@ -271,3 +271,76 @@ func TestRunnerRun_Integration(t *testing.T) {
 		)
 	}
 }
+
+func TestRunnerRun_RecordsInitialFlatAndFinalSnapshots(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 2)
+	candles := []domain.Candle{
+		{Symbol: "BTCUSDT", Timestamp: start, Close: 100},
+		{Symbol: "BTCUSDT", Timestamp: start.AddDate(0, 0, 1), Close: 100},
+	}
+
+	runner, err := NewRunner(
+		RunnerConfig{
+			RunID:          1,
+			StrategyName:   "EMA Cross",
+			Symbol:         "BTCUSDT",
+			Timeframe:      "1d",
+			StartDate:      start,
+			EndDate:        end,
+			InitialCapital: 10000,
+		},
+		&fakeCandlePipeline{candles: candles},
+		&fakeBacktestResultRepository{},
+	)
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+
+	if _, err := runner.Run(); err != nil {
+		t.Fatalf("Runner.Run() error = %v", err)
+	}
+
+	snapshots := runner.statistics.Snapshots()
+	if len(snapshots) != len(candles)+2 {
+		t.Fatalf("snapshot count = %d, want %d", len(snapshots), len(candles)+2)
+	}
+
+	if !snapshots[0].Time.Equal(start) {
+		t.Errorf("initial snapshot time = %v, want %v", snapshots[0].Time, start)
+	}
+
+	if snapshots[0].Equity != 10000 {
+		t.Errorf("initial equity = %.2f, want 10000", snapshots[0].Equity)
+	}
+
+	last := snapshots[len(snapshots)-1]
+	if !last.Time.Equal(end) {
+		t.Errorf("final snapshot time = %v, want %v", last.Time, end)
+	}
+
+	if last.Equity != 10000 {
+		t.Errorf("final equity = %.2f, want 10000", last.Equity)
+	}
+// AI เพิ่ม test ไรมาไว้ check
+// 	if runner.statistics.EquityCurve()[0] != 10000 {
+// 		t.Errorf(
+// 			"equity curve initial value = %.2f, want 10000",
+// 			runner.statistics.EquityCurve()[0],
+// 		)
+// 	}
+
+// 	if runner.statistics.Performance().SharpeRatio != 0 {
+// 		t.Errorf(
+// 			"SharpeRatio = %f, want 0 for a flat equity curve",
+// 			runner.statistics.Performance().SharpeRatio,
+// 		)
+// 	}
+
+// 	if runner.statistics.Performance().MaxDrawdown != 0 {
+// 		t.Errorf(
+// 			"MaxDrawdown = %f, want 0 for a flat equity curve",
+// 			runner.statistics.Performance().MaxDrawdown,
+// 		)
+// 	}
+// }
