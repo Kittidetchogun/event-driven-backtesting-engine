@@ -2,7 +2,6 @@ package statistics
 
 import "time"
 
-// BacktestResult represents the summary result of a completed backtest.
 type BacktestResult struct {
 	RunID        int
 	StrategyName string

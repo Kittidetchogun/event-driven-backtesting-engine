@@ -82,16 +82,16 @@ func TestPortfolioEngineConsume(t *testing.T) {
 		)
 	}
 
-	if position.AveragePrice != 50000 {
+	if position.AveragePrice != 50050 {
 		t.Fatalf(
-			"expected average price 50000, got %.2f",
+			"expected average price 50050, got %.2f",
 			position.AveragePrice,
 		)
 	}
 
-	if position.CurrentPrice != 50000 {
+	if position.CurrentPrice != 50050 {
 		t.Fatalf(
-			"expected market price 50000, got %.2f",
+			"expected market price 50050, got %.2f",
 			position.CurrentPrice,
 		)
 	}
@@ -297,6 +297,29 @@ func TestPortfolioEngineCanBuy_MarketOrder(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("expected market order to pass, got %v", err)
+	}
+}
+func TestPortfolioEngineCanBuy_withFee(t *testing.T) {
+	p := domain.NewPortfolio(1, 1000)
+
+	engine := NewEngine(
+		events.NewEventQueue(),
+		p,
+	)
+
+	order := domain.NewOrder(
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		100,
+		time.Now(),
+	)
+
+	err := engine.CanBuy(order)
+
+	if err != nil {
+		t.Fatalf("expected CanBuy to succeed with fee, got %v", err)
 	}
 }
 

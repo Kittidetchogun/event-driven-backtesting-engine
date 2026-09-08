@@ -6,6 +6,7 @@ import (
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
+	"event-driven-backtesting-engine/internal/matching"
 )
 
 type Engine struct {
@@ -152,7 +153,9 @@ func (e *Engine) CanBuy(order domain.Order) error {
 		return nil
 	}
 
-	requiredCash := order.Quantity * order.Price
+	fee := matching.CalculateFee(order.Price, order.Quantity, matching.DefaultCommissionRate)
+
+	requiredCash := order.Quantity*order.Price + fee
 
 	if e.portfolio.Cash < requiredCash {
 		return fmt.Errorf(

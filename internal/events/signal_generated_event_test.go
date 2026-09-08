@@ -15,6 +15,7 @@ func TestNewSignalGeneratedEvent(t *testing.T) {
 		"BTCUSDT",
 		domain.BuyOrder,
 		0.5,
+		1000,
 		signalTime,
 	)
 

@@ -20,6 +20,7 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	// ------------------------------------------------------------
 
 	_ = godotenv.Load()
+	_ = godotenv.Load("../../.env")
 
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -37,11 +38,18 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	}
 
 	backtestStartStr := os.Getenv("BACKTEST_START_DATE")
+	if backtestStartStr == "" {
+		backtestStartStr = os.Getenv("MARKET_DATA_START_DATE")
+	}
+
 	backtestEndStr := os.Getenv("BACKTEST_END_DATE")
+	if backtestEndStr == "" {
+		backtestEndStr = os.Getenv("MARKET_DATA_END_DATE")
+	}
 
 	if backtestStartStr == "" || backtestEndStr == "" {
 		t.Fatal(
-			"BACKTEST_START_DATE and BACKTEST_END_DATE must be set",
+			"BACKTEST_START_DATE (or MARKET_DATA_START_DATE) and BACKTEST_END_DATE (or MARKET_DATA_END_DATE) must be set",
 		)
 	}
 
