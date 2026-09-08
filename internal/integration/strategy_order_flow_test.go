@@ -7,6 +7,7 @@ import (
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
 	"event-driven-backtesting-engine/internal/order"
+	"event-driven-backtesting-engine/internal/sizing"
 	"event-driven-backtesting-engine/internal/strategy"
 	"event-driven-backtesting-engine/internal/portfolio"
 )
@@ -24,9 +25,12 @@ func TestStrategyToOrderManagerFlow(t *testing.T) {
 		initialPortfolio,
 	)
 
+	sizer := sizing.NewFixedFractional(0.1)
+
 	manager := order.NewManager(
 		portfolioEngine,
 		queue,
+		sizer,
 	)
 
 	dispatcher.Register(

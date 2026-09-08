@@ -15,6 +15,7 @@ func TestNewSignalGeneratedEvent(t *testing.T) {
 		"BTCUSDT",
 		domain.BuyOrder,
 		0.5,
+		50000,
 		signalTime,
 	)
 
@@ -22,6 +23,15 @@ func TestNewSignalGeneratedEvent(t *testing.T) {
 		t.Fatalf("Type() = %q, want %q",
 			event.Type(),
 			SignalGeneratedEventType,
+		)
+	}
+
+	expectedPrice := 50000.0
+
+	if event.Price != expectedPrice {
+		t.Fatalf("Price = %f, want %f",
+			event.Price,
+			expectedPrice,
 		)
 	}
 

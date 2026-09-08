@@ -73,4 +73,88 @@ func TestOrderManagerConsume(t *testing.T) {
 			orderEvent.Order.Quantity,
 		)
 	}
+
+	if !orderEvent.Order.CreatedAt.Equal(signal.SignalTime) {
+		t.Fatalf(
+			"expected Order.CreatedAt=%v, got %v",
+			signal.SignalTime,
+			orderEvent.Order.CreatedAt,
+		)
+	}
+}
+
+func TestOrderManagerSizingUsesSignalPrice(t *testing.T) {
+	queue := events.NewEventQueue()
+
+	initialPortfolio := domain.NewPortfolio(1, 10000)
+
+	portfolioEngine := portfolio.NewEngine(
+		queue,
+		initialPortfolio,
+	)
+
+	sizer := sizing.NewFixedFractional(0.10)
+
+	manager := NewManager(
+		portfolioEngine,
+		queue,
+		sizer,
+	)
+
+	signalTime := time.Date(
+		2026, 8, 12, 0, 0, 0, 0,
+		time.UTC,
+	)
+
+	// Price available at signal time.
+	signalPrice := 100000.0
+
+	signal := events.NewSignalGeneratedEvent(
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		signalPrice,
+		signalTime,
+	)
+
+	if err := manager.Consume(signal); err != nil {
+		t.Fatal(err)
+	}
+
+	event, ok := queue.Pop()
+	if !ok {
+		t.Fatal("expected OrderCreatedEvent")
+	}
+
+	orderEvent, ok := event.(events.OrderCreatedEvent)
+	if !ok {
+		t.Fatalf("expected OrderCreatedEvent, got %T", event)
+	}
+
+	expectedQuantity := 0.01
+
+	if orderEvent.Order.Quantity != expectedQuantity {
+		t.Fatalf(
+			"expected quantity %.8f, got %.8f",
+			expectedQuantity,
+			orderEvent.Order.Quantity,
+		)
+	}
+
+	if orderEvent.Order.Price != signalPrice {
+		t.Fatalf(
+			"expected order price %.2f, got %.2f",
+			signalPrice,
+			orderEvent.Order.Price,
+		)
+	}
+
+	if !orderEvent.Order.CreatedAt.Equal(signalTime) {
+		t.Fatalf(
+			"expected CreatedAt=%v, got %v",
+			signalTime,
+			orderEvent.Order.CreatedAt,
+		)
+	}
 }

@@ -82,9 +82,12 @@ func TestPortfolioEngineConsume(t *testing.T) {
 		)
 	}
 
-	if position.AveragePrice != 50000 {
+	expectedCost := (50000.0 * 1.0) + 50.0
+
+	if position.AveragePrice != expectedCost {
 		t.Fatalf(
-			"expected average price 50000, got %.2f",
+			"expected average price %.2f, got %.2f",
+			expectedCost,
 			position.AveragePrice,
 		)
 	}
@@ -382,5 +385,107 @@ func TestPortfolioEngineCanSell_InsufficientPosition(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected CanSell to fail due to insufficient position")
+	}
+}
+
+func TestPortfolioEngineDoesNotCreatePositionBeforeTradeExecution(t *testing.T) {
+	queue := events.NewEventQueue()
+
+	signalTime := time.Date(
+		2026, 7, 16,
+		0, 0, 0, 0,
+		time.UTC,
+	)
+
+	executionTime := time.Date(
+		2026, 7, 17,
+		0, 0, 0, 0,
+		time.UTC,
+	)
+
+	engine := NewEngine(
+		queue,
+		domain.NewPortfolio(1, 100000),
+	)
+
+	signalCandle := domain.Candle{
+		Timestamp: signalTime,
+		Symbol:    "BTCUSDT",
+		Timeframe: "1d",
+		Open:      100,
+		High:      110,
+		Low:       95,
+		Close:     105,
+		Volume:    1000,
+	}
+
+	// -------------------------------------------------
+	// Day 16
+	// Portfolio sees the signal candle.
+	// There is no executed trade yet.
+	// Therefore no position must exist.
+	// -------------------------------------------------
+
+	engine.UpdateMarketPrices(signalCandle)
+
+	if _, ok := engine.Positions()["BTCUSDT"]; ok {
+		t.Fatal("position must not exist before trade execution")
+	}
+
+	if engine.Portfolio().PositionValue != 0 {
+		t.Fatalf(
+			"expected position value 0 before trade execution, got %.2f",
+			engine.Portfolio().PositionValue,
+		)
+	}
+
+	// -------------------------------------------------
+	// Day 17
+	// Trade is actually executed.
+	// Only now should the portfolio create the position.
+	// -------------------------------------------------
+
+	trade := domain.NewTrade(
+		1,
+		1,
+		1,
+		"BTCUSDT",
+		domain.BuyOrder,
+		1,
+		120,
+		0,
+		executionTime,
+	)
+
+	tradeEvent := events.NewTradeExecutedEvent(trade)
+
+	if err := engine.Consume(tradeEvent); err != nil {
+		t.Fatal(err)
+	}
+
+	position, ok := engine.Positions()["BTCUSDT"]
+	if !ok {
+		t.Fatal("expected position after trade execution")
+	}
+
+	if position.Quantity != 1 {
+		t.Fatalf(
+			"expected position quantity 1, got %.2f",
+			position.Quantity,
+		)
+	}
+
+	if position.AveragePrice != 120 {
+		t.Fatalf(
+			"expected average price 120, got %.2f",
+			position.AveragePrice,
+		)
+	}
+
+	if engine.Portfolio().PositionValue != 120 {
+		t.Fatalf(
+			"expected position value 120, got %.2f",
+			engine.Portfolio().PositionValue,
+		)
 	}
 }

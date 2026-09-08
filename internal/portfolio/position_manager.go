@@ -24,7 +24,7 @@ func UpdatePosition(
 			trade.Side,
 			trade.Quantity,
 			averagePrice,
-			averagePrice,
+			trade.ExecutedPrice,
 		)
 
 		positions[trade.Symbol] = position
