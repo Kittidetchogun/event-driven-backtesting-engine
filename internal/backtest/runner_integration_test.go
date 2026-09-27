@@ -344,3 +344,10 @@ func TestRunnerRun_RecordsInitialFlatAndFinalSnapshots(t *testing.T) {
 		)
 	}
 }
+// 	if runner.statistics.Performance().MaxDrawdown != 0 {
+// 		t.Errorf(
+// 			"MaxDrawdown = %f, want 0 for a flat equity curve",
+// 			runner.statistics.Performance().MaxDrawdown,
+// 		)
+// 	}
+// }

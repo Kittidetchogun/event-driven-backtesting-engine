@@ -31,7 +31,7 @@ func (r *CandleRepository) GetCandles(
 		WHERE symbol = $1
 			AND timeframe = $2
 			AND timestamp >= $3
-			AND timestamp <= $4
+			AND timestamp < $4
 		ORDER BY timestamp ASC
 	`
 

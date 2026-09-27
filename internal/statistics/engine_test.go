@@ -232,6 +232,33 @@ func TestStatisticsEngineEquityCurve(t *testing.T) {
 	}
 }
 
+func TestStatisticsEngineMaxDrawdownUsesLatestSnapshotPerTimestamp(t *testing.T) {
+	engine := NewEngine()
+	timestamps := []time.Time{
+		time.Unix(1, 0).UTC(),
+		time.Unix(2, 0).UTC(),
+		time.Unix(2, 0).UTC(),
+		time.Unix(3, 0).UTC(),
+	}
+	equities := []float64{100, 120, 80, 90}
+
+	for index := range timestamps {
+		portfolio := domain.NewPortfolio(1, 1000)
+		portfolio.UpdatedAt = timestamps[index]
+		portfolio.Equity = equities[index]
+		if err := engine.Consume(events.NewPortfolioUpdatedEvent(portfolio)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if got := len(engine.EquityCurve()); got != 3 {
+		t.Fatalf("equity curve length = %d, want 3", got)
+	}
+	if got := engine.Performance().MaxDrawdown; got != 0.2 {
+		t.Fatalf("max drawdown = %.2f, want 0.20", got)
+	}
+}
+
 func TestStatisticsEngineAppendTrade(t *testing.T) {
 	engine := NewEngine()
 

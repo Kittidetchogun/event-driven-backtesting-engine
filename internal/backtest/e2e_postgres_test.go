@@ -10,8 +10,8 @@ import (
 	"github.com/joho/godotenv"
 
 	"event-driven-backtesting-engine/internal/pipeline"
-	"event-driven-backtesting-engine/internal/storage/postgres"
 	"event-driven-backtesting-engine/internal/statistics"
+	"event-driven-backtesting-engine/internal/storage/postgres"
 )
 
 func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
@@ -71,7 +71,7 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 
 	// ใช้ UTC เพื่อให้ query database มี timezone ที่แน่นอน
 	backtestStart = backtestStart.UTC()
-	backtestEnd = backtestEnd.Add(24*time.Hour - time.Nanosecond).UTC()
+	backtestEnd = backtestEnd.UTC()
 
 	if !backtestStart.Before(backtestEnd) {
 		t.Fatal("BACKTEST_START_DATE must be before BACKTEST_END_DATE")
@@ -106,7 +106,7 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	// ------------------------------------------------------------
 	// 3. Verify PostgreSQL actually contains candles
 	// ------------------------------------------------------------
-	
+
 	candles, err := candleRepository.GetCandles(
 		ctx,
 		symbol,
@@ -126,6 +126,13 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 			"no candles found in PostgreSQL for " +
 				symbol + " " + timeframe,
 		)
+	}
+
+	if timeframe == "1d" &&
+		backtestStart.Equal(time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)) &&
+		backtestEnd.Equal(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)) &&
+		len(candles) != 365 {
+		t.Fatalf("2019 daily candle count = %d, want 365", len(candles))
 	}
 
 	// ------------------------------------------------------------
@@ -167,8 +174,8 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 		pipeline.CandleQuery{
 			Symbol:    symbol,
 			Timeframe: timeframe,
-			Start:     testStart,
-			End:       testEnd,
+			Start:     backtestStart,
+			End:       backtestEnd,
 		},
 	)
 	if err != nil {
