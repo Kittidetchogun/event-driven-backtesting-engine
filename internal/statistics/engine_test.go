@@ -117,13 +117,14 @@ func TestStatisticsEngineAppendMultipleSnapshots(t *testing.T) {
 		99000,
 	}
 
-	for _, equity := range values {
+	for index, equity := range values {
 
 		portfolio := domain.NewPortfolio(
 			1,
 			100000,
 		)
 
+		portfolio.UpdatedAt = time.Unix(int64(index), 0).UTC()
 		portfolio.Equity = equity
 
 		event := events.NewPortfolioUpdatedEvent(
@@ -144,6 +145,41 @@ func TestStatisticsEngineAppendMultipleSnapshots(t *testing.T) {
 	}
 }
 
+func TestStatisticsEngineSnapshots_ReplaceDuplicateAndPreserveOrder(t *testing.T) {
+	engine := NewEngine()
+	first := time.Unix(1000, 0).UTC()
+	second := first.Add(time.Minute)
+
+	portfolios := []struct {
+		timestamp time.Time
+		equity    float64
+	}{
+		{first, 100},
+		{second, 200},
+		{first, 300},
+	}
+
+	for _, item := range portfolios {
+		portfolio := domain.NewPortfolio(1, 1000)
+		portfolio.UpdatedAt = item.timestamp
+		portfolio.Equity = item.equity
+		if err := engine.Consume(events.NewPortfolioUpdatedEvent(portfolio)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	snapshots := engine.Snapshots()
+	if len(snapshots) != 2 {
+		t.Fatalf("expected 2 snapshots, got %d", len(snapshots))
+	}
+	if !snapshots[0].Time.Equal(first) || snapshots[0].Equity != 300 {
+		t.Fatalf("duplicate snapshot was not replaced with latest values: %+v", snapshots[0])
+	}
+	if !snapshots[1].Time.Equal(second) || snapshots[1].Equity != 200 {
+		t.Fatalf("unique snapshot order or values changed: %+v", snapshots[1])
+	}
+}
+
 func TestStatisticsEngineEquityCurve(t *testing.T) {
 
 	engine := NewEngine()
@@ -155,13 +191,14 @@ func TestStatisticsEngineEquityCurve(t *testing.T) {
 		105000,
 	}
 
-	for _, equity := range values {
+	for index, equity := range values {
 
 		portfolio := domain.NewPortfolio(
 			1,
 			100000,
 		)
 
+		portfolio.UpdatedAt = time.Unix(int64(index), 0).UTC()
 		portfolio.Equity = equity
 
 		event := events.NewPortfolioUpdatedEvent(

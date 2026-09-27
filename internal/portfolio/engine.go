@@ -125,7 +125,18 @@ func (e *Engine) recordSnapshot(timestamp time.Time) {
 	e.portfolio.UpdateTimestamp(timestamp)
 
 	snapshot := NewPortfolioSnapshot(e.portfolio)
-	e.snapshots = append(e.snapshots, snapshot)
+	replaced := false
+	for index := range e.snapshots {
+		if e.snapshots[index].Time.Equal(snapshot.Time) {
+			e.snapshots[index] = snapshot
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
+		e.snapshots = append(e.snapshots, snapshot)
+	}
 
 	portfolioEvent := events.NewPortfolioUpdatedEvent(
 		e.portfolio,

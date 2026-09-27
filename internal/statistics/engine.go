@@ -45,10 +45,14 @@ func (e *Engine) Consume(event events.Event) error {
 			event.Portfolio,
 		)
 
-		e.snapshots = append(
-			e.snapshots,
-			snapshot,
-		)
+		for index := range e.snapshots {
+			if e.snapshots[index].Time.Equal(snapshot.Time) {
+				e.snapshots[index] = snapshot
+				return nil
+			}
+		}
+
+		e.snapshots = append(e.snapshots, snapshot)
 
 		return nil
 

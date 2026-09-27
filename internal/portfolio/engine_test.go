@@ -162,6 +162,34 @@ func TestPortfolioEngine_AddSnapshot(t *testing.T) {
 	}
 }
 
+func TestPortfolioEngine_RecordSnapshot_ReplacesDuplicateAndPreservesOrder(t *testing.T) {
+	engine := NewEngine(
+		events.NewEventQueue(),
+		domain.NewPortfolio(1, 100000),
+	)
+
+	first := time.Unix(1000, 0).UTC()
+	second := first.Add(time.Minute)
+
+	engine.portfolio.Cash = 100
+	engine.RecordSnapshot(first)
+	engine.portfolio.Cash = 200
+	engine.RecordSnapshot(second)
+	engine.portfolio.Cash = 300
+	engine.RecordSnapshot(first)
+
+	snapshots := engine.Snapshots()
+	if len(snapshots) != 2 {
+		t.Fatalf("expected 2 snapshots, got %d", len(snapshots))
+	}
+	if !snapshots[0].Time.Equal(first) || snapshots[0].Equity != 300 {
+		t.Fatalf("duplicate snapshot was not replaced with latest values: %+v", snapshots[0])
+	}
+	if !snapshots[1].Time.Equal(second) || snapshots[1].Equity != 200 {
+		t.Fatalf("unique snapshot order or values changed: %+v", snapshots[1])
+	}
+}
+
 func TestPortfolioEngine_PushPortfolioUpdatedEvent(t *testing.T) {
 
 	queue := events.NewEventQueue()
