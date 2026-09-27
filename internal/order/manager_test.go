@@ -67,6 +67,10 @@ func TestOrderManagerConsume(t *testing.T) {
 		t.Fatalf("expected status PENDING got %s", orderEvent.Order.Status)
 	}
 
+	if orderEvent.Order.ID == 0 {
+		t.Fatal("expected non-zero order ID")
+	}
+
 	if orderEvent.Order.Quantity != 0.01 {
 		t.Fatalf(
 			"expected quantity 0.01 got %.8f",
@@ -80,6 +84,38 @@ func TestOrderManagerConsume(t *testing.T) {
 			signal.SignalTime,
 			orderEvent.Order.CreatedAt,
 		)
+	}
+}
+
+func TestOrderManagerAssignsDistinctOrderIDs(t *testing.T) {
+	queue := events.NewEventQueue()
+	portfolioEngine := portfolio.NewEngine(queue, domain.NewPortfolio(1, 10000))
+	manager := NewManager(portfolioEngine, queue, sizing.NewFixedFractional(0.10))
+
+	for index := 0; index < 2; index++ {
+		signal := events.NewSignalGeneratedEvent(
+			1,
+			"BTCUSDT",
+			domain.BuyOrder,
+			1,
+			100,
+			time.Unix(int64(index+1), 0).UTC(),
+		)
+		if err := manager.Consume(signal); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	firstEvent, _ := queue.Pop()
+	secondEvent, _ := queue.Pop()
+	firstOrder := firstEvent.(events.OrderCreatedEvent).Order
+	secondOrder := secondEvent.(events.OrderCreatedEvent).Order
+
+	if firstOrder.ID == 0 || secondOrder.ID == 0 {
+		t.Fatalf("expected non-zero order IDs, got %d and %d", firstOrder.ID, secondOrder.ID)
+	}
+	if firstOrder.ID == secondOrder.ID {
+		t.Fatalf("expected distinct order IDs, got %d", firstOrder.ID)
 	}
 }
 

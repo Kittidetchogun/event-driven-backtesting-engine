@@ -11,21 +11,23 @@ import (
 )
 
 type Manager struct {
-    portfolio *portfolio.Engine
-    queue     *events.EventQueue
-    sizer     sizing.Sizer
+	portfolio   *portfolio.Engine
+	queue       *events.EventQueue
+	sizer       sizing.Sizer
+	nextOrderID domain.OrderID
 }
 
 func NewManager(
-    portfolio *portfolio.Engine,
-    queue *events.EventQueue,
-    sizer sizing.Sizer,
+	portfolio *portfolio.Engine,
+	queue *events.EventQueue,
+	sizer sizing.Sizer,
 ) *Manager {
-    return &Manager{
-        portfolio: portfolio,
-        queue:     queue,
-        sizer:     sizer,
-    }
+	return &Manager{
+		portfolio:   portfolio,
+		queue:       queue,
+		sizer:       sizer,
+		nextOrderID: 1,
+	}
 }
 
 // Consume allows Order Manager to be registered as an Event Consumer.
@@ -51,6 +53,8 @@ func (m *Manager) Consume(event events.Event) error {
 		signal.Price,
 		signal.SignalTime,
 	)
+	order.ID = m.nextOrderID
+	m.nextOrderID++
 
 	if err := domain.ValidateOrder(order); err != nil {
 		return err

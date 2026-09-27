@@ -26,6 +26,7 @@ func TestMatchingEngineConsume(t *testing.T) {
 		50000,
 		signalTime1,
 	)
+	order1.ID = 41
 
 	orderEvent1 := events.NewOrderCreatedEvent(order1)
 
@@ -84,6 +85,10 @@ func TestMatchingEngineConsume(t *testing.T) {
 
 	if trade.TradeID != 1 {
 		t.Fatalf("expected trade ID 1, got %d", trade.TradeID)
+	}
+
+	if trade.OrderID != int(order1.ID) {
+		t.Fatalf("expected trade order ID %d, got %d", order1.ID, trade.OrderID)
 	}
 
 	if trade.Symbol != order1.Symbol {
