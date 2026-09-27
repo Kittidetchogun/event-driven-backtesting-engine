@@ -192,6 +192,11 @@ func (r *Runner) processQueue() error {
 }
 
 func (r *Runner) Run() (statistics.BacktestResult, error) {
+	r.portfolio.RecordSnapshot(r.config.StartDate)
+	if err := r.processQueue(); err != nil {
+		return statistics.BacktestResult{}, err
+	}
+
 	for {
 		candle, ok, err := r.pipeline.Next()
 
@@ -230,6 +235,11 @@ func (r *Runner) Run() (statistics.BacktestResult, error) {
 		if err := r.processQueue(); err != nil {
 			return statistics.BacktestResult{}, err
 		}
+	}
+
+	r.portfolio.RecordSnapshot(r.config.EndDate)
+	if err := r.processQueue(); err != nil {
+		return statistics.BacktestResult{}, err
 	}
 
 	// Build final backtest result.

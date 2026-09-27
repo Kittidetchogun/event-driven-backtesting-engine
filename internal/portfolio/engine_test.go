@@ -172,11 +172,11 @@ func TestPortfolioEngine_RecordSnapshot_ReplacesDuplicateAndPreservesOrder(t *te
 	second := first.Add(time.Minute)
 
 	engine.portfolio.Cash = 100
-	engine.RecordSnapshot(first)
+	engine.recordSnapshot(first)
 	engine.portfolio.Cash = 200
-	engine.RecordSnapshot(second)
+	engine.recordSnapshot(second)
 	engine.portfolio.Cash = 300
-	engine.RecordSnapshot(first)
+	engine.recordSnapshot(first)
 
 	snapshots := engine.Snapshots()
 	if len(snapshots) != 2 {

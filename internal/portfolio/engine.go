@@ -93,6 +93,7 @@ func (e *Engine) Consume(event events.Event) error {
 func (e *Engine) UpdateMarketPrices(candle domain.Candle) {
 	position, ok := e.positions[candle.Symbol]
 	if !ok {
+		e.recordSnapshot(candle.Timestamp)
 		return
 	}
 
@@ -143,6 +144,10 @@ func (e *Engine) recordSnapshot(timestamp time.Time) {
 	)
 
 	e.queue.Push(portfolioEvent)
+}
+
+func (e *Engine) RecordSnapshot(timestamp time.Time) {
+	e.recordSnapshot(timestamp)
 }
 
 func (e *Engine) Portfolio() domain.Portfolio {
