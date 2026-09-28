@@ -33,12 +33,13 @@ type Runner struct {
 	queue      *events.EventQueue
 	dispatcher *events.EventDispatcher
 
-	strategy   *strategy.EmaCross
-	order      *order.Manager
-	matching   *matching.Engine
-	portfolio  *portfolio.Engine
-	statistics *statistics.Engine
-	dashboard  *dashboard.Consumer
+	strategy    *strategy.EmaCross
+	order       *order.Manager
+	matching    *matching.Engine
+	portfolio   *portfolio.Engine
+	statistics  *statistics.Engine
+	dashboard   *dashboard.Consumer
+	equityTrace []EquityTraceRow
 
 	config RunnerConfig
 }
@@ -107,16 +108,17 @@ func NewRunner(
 	}
 
 	runner := &Runner{
-		pipeline:   candlePipeline,
-		queue:      queue,
-		dispatcher: dispatcher,
-		strategy:   emaCross,
-		order:      orderManager,
-		matching:   matchingEngine,
-		portfolio:  portfolioEngine,
-		statistics: statisticsEngine,
-		dashboard:  dashboardConsumer,
-		config:     config,
+		pipeline:    candlePipeline,
+		queue:       queue,
+		dispatcher:  dispatcher,
+		strategy:    emaCross,
+		order:       orderManager,
+		matching:    matchingEngine,
+		portfolio:   portfolioEngine,
+		statistics:  statisticsEngine,
+		dashboard:   dashboardConsumer,
+		equityTrace: make([]EquityTraceRow, 0),
+		config:      config,
 	}
 
 	runner.registerHandlers()
@@ -235,6 +237,8 @@ func (r *Runner) Run() (statistics.BacktestResult, error) {
 		if err := r.processQueue(); err != nil {
 			return statistics.BacktestResult{}, err
 		}
+
+		r.recordEquityTrace(candle)
 	}
 
 	r.portfolio.RecordSnapshot(r.config.EndDate)
