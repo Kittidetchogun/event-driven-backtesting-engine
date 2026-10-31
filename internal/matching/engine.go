@@ -1,14 +1,31 @@
 package matching
 
 import (
+	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
 )
 
+var (
+	ErrInvalidExecutionPrice    = errors.New("invalid execution price")
+	ErrInvalidExecutionQuantity = errors.New("invalid execution quantity")
+	ErrCashReserverRequired     = errors.New("cash reservation provider is required")
+)
+
+// CashReserver is the minimal portfolio capability required by matching.
+// The portfolio remains the owner of cash and reservation state.
+type CashReserver interface {
+	Reserve(orderID domain.OrderID, amount float64) error
+	Release(orderID domain.OrderID) error
+}
+
 type Engine struct {
-	queue *events.EventQueue
+	queue    *events.EventQueue
+	reserver CashReserver
 
 	trades []domain.Trade
 
@@ -17,13 +34,21 @@ type Engine struct {
 	pendingOrders []domain.Order
 }
 
-func NewEngine(queue *events.EventQueue) *Engine {
+func NewEngine(queue *events.EventQueue, reserver CashReserver) (*Engine, error) {
+	if queue == nil {
+		return nil, errors.New("event queue is required")
+	}
+	if reserver == nil {
+		return nil, ErrCashReserverRequired
+	}
+
 	return &Engine{
 		queue:         queue,
+		reserver:      reserver,
 		trades:        make([]domain.Trade, 0),
 		nextTradeID:   1,
 		pendingOrders: make([]domain.Order, 0),
-	}
+	}, nil
 }
 
 func (e *Engine) Trades() []domain.Trade {
@@ -43,7 +68,11 @@ func (e *Engine) Consume(event events.Event) error {
 
 	// Validate order before accepting it.
 	if err := domain.ValidateOrder(order); err != nil {
-		return err
+		if rejectErr := order.Reject(err.Error(), order.CreatedAt); rejectErr != nil {
+			return rejectErr
+		}
+		e.queue.Push(events.NewOrderRejectedEvent(order, err.Error()))
+		return nil
 	}
 
 	// Do NOT fill here.
@@ -63,9 +92,9 @@ func (e *Engine) ExecutePending(candle domain.Candle) error {
 		return nil
 	}
 
-	remaining := make([]domain.Order, 0)
+	remaining := make([]domain.Order, 0, len(e.pendingOrders))
 
-	for _, order := range e.pendingOrders {
+	for index, order := range e.pendingOrders {
 
 		// Safety check: an order created on the same candle
 		// must not be executed on that candle.
@@ -74,19 +103,44 @@ func (e *Engine) ExecutePending(candle domain.Candle) error {
 			continue
 		}
 
-		// Fill at the current candle timestamp.
-		if err := order.Fill(candle.Timestamp); err != nil {
-			return err
-		}
-
 		// Execution price = NEXT candle OPEN.
 		executedPrice := candle.Open
+		if executedPrice <= 0 || math.IsNaN(executedPrice) || math.IsInf(executedPrice, 0) {
+			if err := e.rejectPendingOrder(&order, candle.Timestamp, ErrInvalidExecutionPrice.Error()); err != nil {
+				return err
+			}
+			continue
+		}
+		if order.Quantity <= 0 || math.IsNaN(order.Quantity) || math.IsInf(order.Quantity, 0) {
+			if err := e.rejectPendingOrder(&order, candle.Timestamp, ErrInvalidExecutionQuantity.Error()); err != nil {
+				return err
+			}
+			continue
+		}
 
 		transactionCost := CalculateFee(
 			executedPrice,
 			order.Quantity,
 			DefaultCommissionRate,
 		)
+		totalCost := executedPrice*order.Quantity + transactionCost
+		if err := e.reserver.Reserve(order.ID, totalCostForOrder(order, totalCost)); err != nil {
+			if rejectErr := e.rejectPendingOrder(&order, candle.Timestamp, err.Error()); rejectErr != nil {
+				return rejectErr
+			}
+			continue
+		}
+
+		// Fill only after execution price, quantity and cash have passed validation.
+		if err := order.Fill(candle.Timestamp); err != nil {
+			releaseErr := e.reserver.Release(order.ID)
+			remaining = append(remaining, e.pendingOrders[index+1:]...)
+			e.pendingOrders = remaining
+			if releaseErr != nil {
+				return fmt.Errorf("fill failed: %w; release reservation failed: %v", err, releaseErr)
+			}
+			return err
+		}
 
 		tradeID := e.nextTradeID
 		e.nextTradeID++
@@ -112,5 +166,20 @@ func (e *Engine) ExecutePending(candle domain.Candle) error {
 
 	e.pendingOrders = remaining
 
+	return nil
+}
+
+func totalCostForOrder(order domain.Order, buyCost float64) float64 {
+	if order.Side == domain.BuyOrder {
+		return buyCost
+	}
+	return 0
+}
+
+func (e *Engine) rejectPendingOrder(order *domain.Order, rejectedAt time.Time, reason string) error {
+	if err := order.Reject(reason, rejectedAt); err != nil {
+		return err
+	}
+	e.queue.Push(events.NewOrderRejectedEvent(*order, reason, rejectedAt))
 	return nil
 }

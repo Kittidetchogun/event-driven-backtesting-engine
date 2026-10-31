@@ -3,7 +3,7 @@ package portfolio
 import "event-driven-backtesting-engine/internal/domain"
 
 // ApplyCashUpdate updates portfolio cash after a trade.
-func ApplyCashUpdate(
+func applyCashUpdate(
 	p *domain.Portfolio,
 	trade domain.Trade,
 ) {

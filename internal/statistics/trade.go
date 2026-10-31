@@ -1,12 +1,26 @@
 package statistics
 
-import "event-driven-backtesting-engine/internal/domain"
+import (
+	"errors"
+	"fmt"
+	"math"
+
+	"event-driven-backtesting-engine/internal/domain"
+)
+
+var (
+	ErrInvalidTrade          = errors.New("invalid trade")
+	ErrNoTrackedPosition     = errors.New("no tracked position")
+	ErrExcessiveSellQuantity = errors.New("sell quantity exceeds tracked position")
+)
 
 type TradeStat struct {
 	TotalTrades      int
 	NetProfit        float64
 	Winrate          float64
 	ProfitableTrades int
+	LosingTrades     int
+	BreakevenTrades  int
 	Loss_Avg         float64
 	Win_Avg          float64
 }
@@ -22,12 +36,27 @@ type openPosition struct {
 	averageCost float64
 }
 
-func pairTrades(trades []domain.Trade) []ClosedTrade {
+func validateTrade(trade domain.Trade) error {
+	if trade.Symbol == "" || trade.Quantity <= 0 || math.IsNaN(trade.Quantity) || math.IsInf(trade.Quantity, 0) ||
+		trade.ExecutedPrice <= 0 || math.IsNaN(trade.ExecutedPrice) || math.IsInf(trade.ExecutedPrice, 0) ||
+		trade.TransactionCost < 0 || math.IsNaN(trade.TransactionCost) || math.IsInf(trade.TransactionCost, 0) {
+		return fmt.Errorf("%w: invalid numeric data", ErrInvalidTrade)
+	}
+	if trade.Side != domain.BuyOrder && trade.Side != domain.SellOrder {
+		return fmt.Errorf("%w: invalid side %q", ErrInvalidTrade, trade.Side)
+	}
+	return nil
+}
+
+func pairTrades(trades []domain.Trade) ([]ClosedTrade, error) {
 	var result []ClosedTrade
 
 	positions := make(map[string]openPosition)
 
 	for _, trade := range trades {
+		if err := validateTrade(trade); err != nil {
+			return nil, err
+		}
 
 		// -------------------------
 		// Buy
@@ -61,14 +90,18 @@ func pairTrades(trades []domain.Trade) []ClosedTrade {
 
 		position, ok := positions[trade.Symbol]
 		if !ok || position.quantity <= 0 {
-			continue
+			return nil, fmt.Errorf("%w: symbol=%s", ErrNoTrackedPosition, trade.Symbol)
+		}
+
+		if trade.Quantity > position.quantity {
+			return nil, fmt.Errorf("%w: symbol=%s required=%.8f available=%.8f", ErrExcessiveSellQuantity, trade.Symbol, trade.Quantity, position.quantity)
 		}
 
 		matchQuantity := trade.Quantity
 
 		// ป้องกันกรณีขายมากกว่า position ที่มี
 		if matchQuantity > position.quantity {
-			matchQuantity = position.quantity
+			return nil, fmt.Errorf("%w: symbol=%s required=%.8f available=%.8f", ErrExcessiveSellQuantity, trade.Symbol, trade.Quantity, position.quantity)
 		}
 
 		// Cost basis ของ quantity ที่ขาย
@@ -94,12 +127,12 @@ func pairTrades(trades []domain.Trade) []ClosedTrade {
 
 		result = append(result, ClosedTrade{
 			Entry: domain.Trade{
-				Symbol:         trade.Symbol,
-				Side:           domain.BuyOrder,
-				Quantity:       matchQuantity,
-				ExecutedPrice:  position.averageCost,
+				Symbol:          trade.Symbol,
+				Side:            domain.BuyOrder,
+				Quantity:        matchQuantity,
+				ExecutedPrice:   position.averageCost,
 				TransactionCost: 0,
-				ExecutedTime:  trade.ExecutedTime,
+				ExecutedTime:    trade.ExecutedTime,
 			},
 			Exit:   trade,
 			Profit: profit,
@@ -115,7 +148,7 @@ func pairTrades(trades []domain.Trade) []ClosedTrade {
 		}
 	}
 
-	return result
+	return result, nil
 }
 
 func netProfit(closedTrades []ClosedTrade) float64 {
@@ -149,6 +182,30 @@ func profitTrades(closedTrades []ClosedTrade) int {
 
 	for _, trade := range closedTrades {
 		if trade.Profit > 0 {
+			count++
+		}
+	}
+
+	return count
+}
+
+func lossTrades(closedTrades []ClosedTrade) int {
+	count := 0
+
+	for _, trade := range closedTrades {
+		if trade.Profit < 0 {
+			count++
+		}
+	}
+
+	return count
+}
+
+func breakevenTrades(closedTrades []ClosedTrade) int {
+	count := 0
+
+	for _, trade := range closedTrades {
+		if trade.Profit == 0 {
 			count++
 		}
 	}
@@ -192,15 +249,20 @@ func winAvg(closedTrades []ClosedTrade) float64 {
 	return total / float64(count)
 }
 
-func NewTradeStat(trades []domain.Trade) TradeStat {
-	closedTrades := pairTrades(trades)
+func NewTradeStat(trades []domain.Trade) (TradeStat, error) {
+	closedTrades, err := pairTrades(trades)
+	if err != nil {
+		return TradeStat{}, err
+	}
 
 	return TradeStat{
 		TotalTrades:      len(closedTrades),
 		NetProfit:        netProfit(closedTrades),
 		Winrate:          winrate(closedTrades),
 		ProfitableTrades: profitTrades(closedTrades),
+		LosingTrades:     lossTrades(closedTrades),
+		BreakevenTrades:  breakevenTrades(closedTrades),
 		Loss_Avg:         lossAvg(closedTrades),
 		Win_Avg:          winAvg(closedTrades),
-	}
+	}, nil
 }

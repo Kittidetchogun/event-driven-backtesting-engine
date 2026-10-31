@@ -82,3 +82,24 @@ func TestMaxDrawdown_EmptyCurve(t *testing.T) {
 		)
 	}
 }
+
+func TestMaxDrawdown_ZeroAndNegativeEquity(t *testing.T) {
+	if got := MaxDrawdown([]float64{100, 0, 50}); math.Abs(got-1) > 1e-12 {
+		t.Fatalf("drawdown at zero = %.12f, want 1", got)
+	}
+	if got := MaxDrawdown([]float64{-100, -200}); got != 0 {
+		t.Fatalf("negative-only drawdown = %.12f, want 0", got)
+	}
+	if got := MaxDrawdown([]float64{100, -10}); got != 1 {
+		t.Fatalf("negative equity drawdown = %.12f, want capped 1", got)
+	}
+}
+
+func TestMaxDrawdown_NonFiniteEquityDoesNotPropagate(t *testing.T) {
+	for _, equity := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		got := MaxDrawdown([]float64{100, equity, 90})
+		if math.IsNaN(got) || math.IsInf(got, 0) {
+			t.Fatalf("MaxDrawdown with %v = %v, want finite result", equity, got)
+		}
+	}
+}

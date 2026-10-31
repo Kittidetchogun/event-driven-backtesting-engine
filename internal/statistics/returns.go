@@ -1,5 +1,7 @@
 package statistics
 
+import "math"
+
 // Returns calculates period-to-period returns from an equity curve.
 func Returns(equityCurve []float64) []float64 {
 
@@ -11,14 +13,20 @@ func Returns(equityCurve []float64) []float64 {
 
 	for i := 1; i < len(equityCurve); i++ {
 
-		if equityCurve[i-1] == 0 {
-			return []float64{}
+		if equityCurve[i-1] == 0 || math.IsNaN(equityCurve[i-1]) || math.IsInf(equityCurve[i-1], 0) {
+			break
+		}
+		if math.IsNaN(equityCurve[i]) || math.IsInf(equityCurve[i], 0) {
+			break
 		}
 
 		ret :=
 			(equityCurve[i] - equityCurve[i-1]) /
 				equityCurve[i-1]
 
+		if math.IsNaN(ret) || math.IsInf(ret, 0) {
+			break
+		}
 		returns = append(returns, ret)
 	}
 

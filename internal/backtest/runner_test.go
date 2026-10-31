@@ -126,6 +126,30 @@ func TestRunnerContinuesAfterOrderRejectedEvent(t *testing.T) {
 	}
 }
 
+func TestRunnerStopsWhenPortfolioSettlementFails(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	runner, err := NewRunner(
+		RunnerConfig{RunID: 4001, StartDate: start, EndDate: start, InitialCapital: 1000},
+		&mockCandlePipeline{},
+		&fakeBacktestResultRepository{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trade := domain.NewTrade(1, 4001, 999, "BTCUSDT", domain.BuyOrder, 1, 100, 0, start)
+	runner.queue.Push(events.NewTradeExecutedEvent(trade))
+	if err := runner.processQueue(); err == nil {
+		t.Fatal("expected settlement failure to stop queue processing")
+	}
+	if runner.portfolio.Portfolio().Cash != 1000 {
+		t.Fatal("failed settlement must not change cash")
+	}
+	if len(runner.portfolio.Positions()) != 0 {
+		t.Fatal("failed settlement must not create a position")
+	}
+}
+
 type testBacktestContinuesEvent struct {
 	events.BaseEvent
 }

@@ -263,7 +263,10 @@ func TestBacktestEndToEnd(t *testing.T) {
 	// 9. Verify performance metrics
 	// ------------------------------------------------------------
 
-	performance := runner.statistics.Performance()
+	performance, err := runner.statistics.Performance()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if performance.WinRate < 0 || performance.WinRate > 1 {
 		t.Errorf(

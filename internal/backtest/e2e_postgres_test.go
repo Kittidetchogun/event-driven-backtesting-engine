@@ -298,8 +298,14 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	expectedTotalReturn :=
 		(finalEquity - initialCapital) / initialCapital
 
-	performance := runner.statistics.Performance()
-	tradeStats := runner.statistics.TradeStats()
+	performance, err := runner.statistics.Performance()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tradeStats, err := runner.statistics.TradeStats()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// ------------------------------------------------------------
 	// Total Return

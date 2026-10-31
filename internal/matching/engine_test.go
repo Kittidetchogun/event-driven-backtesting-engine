@@ -1,16 +1,63 @@
 package matching
 
 import (
+	"errors"
+	"math"
+	"strings"
 	"testing"
 	"time"
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
+	"event-driven-backtesting-engine/internal/portfolio"
 )
+
+type testCashReserver struct {
+	reservations map[domain.OrderID]float64
+}
+
+func newTestCashReserver() *testCashReserver {
+	return &testCashReserver{reservations: make(map[domain.OrderID]float64)}
+}
+
+func mustNewEngine(t *testing.T, queue *events.EventQueue, reserver CashReserver) *Engine {
+	t.Helper()
+	engine, err := NewEngine(queue, reserver)
+	if err != nil {
+		t.Fatalf("NewEngine() error = %v", err)
+	}
+	return engine
+}
+
+func TestNewEngineRequiresCashReserver(t *testing.T) {
+	engine, err := NewEngine(events.NewEventQueue(), nil)
+	if !errors.Is(err, ErrCashReserverRequired) {
+		t.Fatalf("NewEngine() error = %v, want ErrCashReserverRequired", err)
+	}
+	if engine != nil {
+		t.Fatal("expected nil engine when CashReserver is missing")
+	}
+}
+
+func (r *testCashReserver) Reserve(orderID domain.OrderID, amount float64) error {
+	if _, ok := r.reservations[orderID]; ok {
+		return errors.New("duplicate reservation")
+	}
+	r.reservations[orderID] = amount
+	return nil
+}
+
+func (r *testCashReserver) Release(orderID domain.OrderID) error {
+	if _, ok := r.reservations[orderID]; !ok {
+		return errors.New("reservation not found")
+	}
+	delete(r.reservations, orderID)
+	return nil
+}
 
 func TestMatchingEngineConsume(t *testing.T) {
 	queue := events.NewEventQueue()
-	engine := NewEngine(queue)
+	engine := mustNewEngine(t, queue, newTestCashReserver())
 
 	signalTime1 := time.Date(
 		2026, 7, 16,
@@ -268,7 +315,7 @@ func TestMatchingEngineConsume(t *testing.T) {
 
 func TestMatchingEngineExecutesOrderOnNextCandleOpen(t *testing.T) {
 	queue := events.NewEventQueue()
-	engine := NewEngine(queue)
+	engine := mustNewEngine(t, queue, newTestCashReserver())
 
 	signalTime := time.Date(
 		2026, 7, 16,
@@ -411,5 +458,200 @@ func TestMatchingEngineExecutesOrderOnNextCandleOpen(t *testing.T) {
 	// Trade must never execute at the signal candle.
 	if trade.ExecutedTime.Equal(signalCandle.Timestamp) {
 		t.Fatal("trade executed on the same candle as the signal")
+	}
+}
+
+func TestMatchingEngineRejectsInvalidExecutionValues(t *testing.T) {
+	tests := []struct {
+		name          string
+		open          float64
+		quantity      float64
+		wantErrReason error
+	}{
+		{name: "zero price", open: 0, quantity: 1, wantErrReason: ErrInvalidExecutionPrice},
+		{name: "negative price", open: -1, quantity: 1, wantErrReason: ErrInvalidExecutionPrice},
+		{name: "nan price", open: math.NaN(), quantity: 1, wantErrReason: ErrInvalidExecutionPrice},
+		{name: "infinite price", open: math.Inf(1), quantity: 1, wantErrReason: ErrInvalidExecutionPrice},
+		{name: "nan quantity", open: 100, quantity: math.NaN(), wantErrReason: ErrInvalidExecutionQuantity},
+		{name: "infinite quantity", open: 100, quantity: math.Inf(1), wantErrReason: ErrInvalidExecutionQuantity},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			queue := events.NewEventQueue()
+			engine := mustNewEngine(t, queue, newTestCashReserver())
+			order := domain.NewOrder(1, "BTCUSDT", domain.BuyOrder, test.quantity, 100, time.Unix(1, 0))
+			if err := engine.Consume(events.NewOrderCreatedEvent(order)); err != nil {
+				t.Fatal(err)
+			}
+			if err := engine.ExecutePending(domain.Candle{Timestamp: time.Unix(2, 0), Open: test.open}); err != nil {
+				t.Fatal(err)
+			}
+			if len(engine.Trades()) != 0 {
+				t.Fatal("invalid execution must not create a trade")
+			}
+			event, ok := queue.Pop()
+			if !ok {
+				t.Fatal("expected OrderRejectedEvent")
+			}
+			rejected, ok := event.(events.OrderRejectedEvent)
+			if !ok || !strings.Contains(rejected.Reason, test.wantErrReason.Error()) {
+				t.Fatalf("expected rejection reason containing %q, got %#v", test.wantErrReason, event)
+			}
+		})
+	}
+}
+
+func TestMatchingEngineRejectedEventUsesExecutionTimestamp(t *testing.T) {
+	queue := events.NewEventQueue()
+	engine := mustNewEngine(t, queue, newTestCashReserver())
+	createdAt := time.Unix(1, 0).UTC()
+	rejectedAt := time.Unix(2, 0).UTC()
+	order := domain.NewOrder(1, "BTCUSDT", domain.BuyOrder, 1, 100, createdAt)
+	if err := engine.Consume(events.NewOrderCreatedEvent(order)); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.ExecutePending(domain.Candle{Timestamp: rejectedAt, Open: 0}); err != nil {
+		t.Fatal(err)
+	}
+	event, ok := queue.Pop()
+	if !ok {
+		t.Fatal("expected OrderRejectedEvent")
+	}
+	rejected, ok := event.(events.OrderRejectedEvent)
+	if !ok {
+		t.Fatalf("event type = %T, want OrderRejectedEvent", event)
+	}
+	if rejected.Order.RejectedAt == nil || !rejected.Order.RejectedAt.Equal(rejectedAt) {
+		t.Fatalf("RejectedAt = %v, want %v", rejected.Order.RejectedAt, rejectedAt)
+	}
+	if !rejected.Timestamp().Equal(rejectedAt) {
+		t.Fatalf("event timestamp = %v, want %v", rejected.Timestamp(), rejectedAt)
+	}
+}
+
+func TestExecutePendingErrorKeepsOnlyUnprocessedOrders(t *testing.T) {
+	queue := events.NewEventQueue()
+	engine := mustNewEngine(t, queue, newTestCashReserver())
+	timestamp := time.Unix(1, 0).UTC()
+	first := domain.NewOrder(1, "BTCUSDT", domain.BuyOrder, 1, 100, timestamp)
+	first.ID = 1
+	second := domain.NewOrder(1, "BTCUSDT", domain.BuyOrder, 1, 100, timestamp)
+	second.ID = 2
+	if err := second.Fill(timestamp); err != nil {
+		t.Fatal(err)
+	}
+	third := domain.NewOrder(1, "BTCUSDT", domain.BuyOrder, 1, 100, timestamp)
+	third.ID = 3
+	for _, order := range []domain.Order{first, second, third} {
+		if err := engine.Consume(events.NewOrderCreatedEvent(order)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := engine.ExecutePending(domain.Candle{Timestamp: timestamp.Add(time.Minute), Open: 120}); err == nil {
+		t.Fatal("expected Fill error for already-filled order")
+	}
+	if len(engine.Trades()) != 1 {
+		t.Fatalf("trades = %d, want 1", len(engine.Trades()))
+	}
+	if len(engine.pendingOrders) != 1 || engine.pendingOrders[0].ID != third.ID {
+		t.Fatalf("pending orders after error = %#v, want only order %d", engine.pendingOrders, third.ID)
+	}
+}
+
+func TestMatchingEngineRejectsWhenReservationFails(t *testing.T) {
+	queue := events.NewEventQueue()
+	reserver := newTestCashReserver()
+	reserver.reservations[99] = 1
+	engine := mustNewEngine(t, queue, reserver)
+
+	order := domain.NewOrder(1, "BTCUSDT", domain.BuyOrder, 1, 100, time.Unix(1, 0))
+	order.ID = 99
+	if err := engine.Consume(events.NewOrderCreatedEvent(order)); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.ExecutePending(domain.Candle{Timestamp: time.Unix(2, 0), Open: 120}); err != nil {
+		t.Fatal(err)
+	}
+	if len(engine.Trades()) != 0 {
+		t.Fatal("reservation failure must not create a trade")
+	}
+	if queue.Len() != 1 {
+		t.Fatalf("expected one rejection event, got %d", queue.Len())
+	}
+}
+
+func TestMatchingEngineRejectsInvalidQuantityAtConsume(t *testing.T) {
+	for _, quantity := range []float64{0, -1} {
+		queue := events.NewEventQueue()
+		engine := mustNewEngine(t, queue, newTestCashReserver())
+		order := domain.NewOrder(1, "BTCUSDT", domain.BuyOrder, quantity, 100, time.Unix(1, 0))
+		if err := engine.Consume(events.NewOrderCreatedEvent(order)); err != nil {
+			t.Fatalf("quantity %.2f: Consume() error = %v", quantity, err)
+		}
+		if len(engine.Trades()) != 0 || queue.Len() != 1 {
+			t.Fatalf("quantity %.2f: expected one rejection and no trade", quantity)
+		}
+		event, _ := queue.Pop()
+		if _, ok := event.(events.OrderRejectedEvent); !ok {
+			t.Fatalf("quantity %.2f: expected OrderRejectedEvent", quantity)
+		}
+	}
+}
+
+func TestMatchingEngineExecutionReservationWithPortfolio(t *testing.T) {
+	tests := []struct {
+		name       string
+		cash       float64
+		open       float64
+		orders     int
+		wantTrades int
+		wantCash   float64
+	}{
+		{name: "gap but affordable", cash: 1000, open: 120, orders: 1, wantTrades: 1, wantCash: 879.88},
+		{name: "gap unaffordable", cash: 1000, open: 1000, orders: 1, wantTrades: 0, wantCash: 1000},
+		{name: "fee unaffordable", cash: 100, open: 100, orders: 1, wantTrades: 0, wantCash: 100},
+		{name: "multiple orders reserve cumulatively", cash: 150, open: 100, orders: 2, wantTrades: 1, wantCash: 49.9},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			queue := events.NewEventQueue()
+			portfolioEngine := portfolio.NewEngine(queue, domain.NewPortfolio(1, test.cash))
+			engine := mustNewEngine(t, queue, portfolioEngine)
+			for index := 0; index < test.orders; index++ {
+				order := domain.NewOrder(1, "BTCUSDT", domain.BuyOrder, 1, 100, time.Unix(1, 0))
+				order.ID = domain.OrderID(index + 1)
+				if err := engine.Consume(events.NewOrderCreatedEvent(order)); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if err := engine.ExecutePending(domain.Candle{Timestamp: time.Unix(2, 0), Open: test.open}); err != nil {
+				t.Fatal(err)
+			}
+			for !queue.IsEmpty() {
+				event, _ := queue.Pop()
+				switch event.(type) {
+				case events.OrderRejectedEvent, events.PortfolioUpdatedEvent:
+					continue
+				case events.TradeExecutedEvent:
+					if err := portfolioEngine.Consume(event); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			if len(engine.Trades()) != test.wantTrades {
+				t.Fatalf("trades = %d, want %d", len(engine.Trades()), test.wantTrades)
+			}
+			if got := portfolioEngine.Portfolio().Cash; math.Abs(got-test.wantCash) > 1e-9 {
+				t.Fatalf("cash = %.12f, want %.12f", got, test.wantCash)
+			}
+			if len(portfolioEngine.Positions()) != test.wantTrades {
+				t.Fatalf("positions = %d, want %d", len(portfolioEngine.Positions()), test.wantTrades)
+			}
+		})
 	}
 }

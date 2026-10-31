@@ -26,7 +26,7 @@ func TestApplyCashUpdate_Buy(t *testing.T) {
 		time.Now(),
 	)
 
-	ApplyCashUpdate(&portfolio, trade)
+	applyCashUpdate(&portfolio, trade)
 
 	expected := 49950.0
 
@@ -58,7 +58,7 @@ func TestApplyCashUpdate_Sell(t *testing.T) {
 		time.Now(),
 	)
 
-	ApplyCashUpdate(&portfolio, trade)
+	applyCashUpdate(&portfolio, trade)
 
 	expected := 149950.0
 

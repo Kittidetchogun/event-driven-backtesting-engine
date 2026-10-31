@@ -1,6 +1,7 @@
 package statistics
 
 import (
+	"errors"
 	"math"
 	"testing"
 	"time"
@@ -86,7 +87,10 @@ func TestEnginePerformance(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	performance := engine.Performance()
+	performance, err := engine.Performance()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Trade profit:
 	// (110 - 100) * 1 - 1 - 1 = 8
@@ -136,7 +140,10 @@ func TestEnginePerformance(t *testing.T) {
 func TestEnginePerformance_Empty(t *testing.T) {
 	engine := NewEngine()
 
-	performance := engine.Performance()
+	performance, err := engine.Performance()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if performance.NetProfit != 0 {
 		t.Fatalf("expected net profit 0, got %.2f", performance.NetProfit)
@@ -165,5 +172,101 @@ func TestEnginePerformance_Empty(t *testing.T) {
 			"expected total trades 0, got %d",
 			performance.TotalTrades,
 		)
+	}
+}
+
+func TestSharpeRatioInsufficientReturns(t *testing.T) {
+	if got := SharpeRatio(nil); got != 0 || math.IsNaN(got) || math.IsInf(got, 0) {
+		t.Fatalf("SharpeRatio(nil) = %v, want finite zero", got)
+	}
+	if got := SharpeRatio([]float64{100, 110}); got != 0 || math.IsNaN(got) || math.IsInf(got, 0) {
+		t.Fatalf("SharpeRatio(one return) = %v, want finite zero", got)
+	}
+}
+
+func TestSharpeRatioValidSampleCalculationUnchanged(t *testing.T) {
+	got := SharpeRatio([]float64{100, 110, 104.5, 109.725})
+	want := Mean([]float64{0.10, -0.05, 0.05}) / StdDev([]float64{0.10, -0.05, 0.05})
+	if math.Abs(got-want) > 1e-12 {
+		t.Fatalf("SharpeRatio() = %.15f, want %.15f", got, want)
+	}
+}
+
+func TestEnginePerformanceSeparatesBreakevenTrades(t *testing.T) {
+	engine := NewEngine()
+	now := time.Unix(1000, 0)
+	for index, sellPrice := range []float64{120, 110, 95, 85, 100} {
+		orderID := index*2 + 1
+		buy := domain.NewTrade(orderID, 1, orderID, "BTCUSDT", domain.BuyOrder, 1, 100, 0, now)
+		sell := domain.NewTrade(orderID+1, 1, orderID+1, "BTCUSDT", domain.SellOrder, 1, sellPrice, 0, now.Add(time.Minute))
+		if err := engine.Consume(events.NewTradeExecutedEvent(buy)); err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.Consume(events.NewTradeExecutedEvent(sell)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	performance, err := engine.Performance()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if performance.TotalTrades != 5 || performance.WinningTrades != 2 || performance.LosingTrades != 2 || performance.BreakevenTrades != 1 {
+		t.Fatalf("performance counts = total %d wins %d losses %d breakeven %d, want 5/2/2/1", performance.TotalTrades, performance.WinningTrades, performance.LosingTrades, performance.BreakevenTrades)
+	}
+}
+
+func TestPerformanceRejectsIncompleteEquityCurve(t *testing.T) {
+	for _, invalid := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		engine := NewEngine()
+		for index, equity := range []float64{100, 110, 120, 130} {
+			portfolio := domain.NewPortfolio(1, 1000)
+			portfolio.Equity = equity
+			portfolio.Cash = equity
+			portfolio.UpdatedAt = time.Unix(int64(index), 0)
+			if err := engine.Consume(events.NewPortfolioUpdatedEvent(portfolio)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		engine.Snapshots()[3].Equity = invalid
+		if _, err := engine.Performance(); !errors.Is(err, ErrInvalidEquityCurve) {
+			t.Fatalf("Performance() error = %v, want ErrInvalidEquityCurve for %v", err, invalid)
+		}
+	}
+}
+
+func TestPerformanceRejectsZeroPreviousEquityAfterValidReturns(t *testing.T) {
+	engine := NewEngine()
+	for index, equity := range []float64{100, 110, 0, 120} {
+		portfolio := domain.NewPortfolio(1, 1000)
+		portfolio.Equity = equity
+		portfolio.Cash = equity
+		portfolio.UpdatedAt = time.Unix(int64(index), 0)
+		if err := engine.Consume(events.NewPortfolioUpdatedEvent(portfolio)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := engine.Performance(); !errors.Is(err, ErrInvalidEquityCurve) {
+		t.Fatalf("Performance() error = %v, want ErrInvalidEquityCurve", err)
+	}
+}
+
+func TestPerformanceAcceptsNegativeEquity(t *testing.T) {
+	engine := NewEngine()
+	for index, equity := range []float64{100, -50, -25} {
+		portfolio := domain.NewPortfolio(1, 1000)
+		portfolio.Equity = equity
+		portfolio.Cash = equity
+		portfolio.UpdatedAt = time.Unix(int64(index), 0)
+		if err := engine.Consume(events.NewPortfolioUpdatedEvent(portfolio)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	performance, err := engine.Performance()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.IsNaN(performance.SharpeRatio) || math.IsInf(performance.SharpeRatio, 0) || performance.MaxDrawdown != 1 {
+		t.Fatalf("performance = %+v, want finite Sharpe and drawdown 1", performance)
 	}
 }

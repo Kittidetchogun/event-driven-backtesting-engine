@@ -2,12 +2,16 @@ package statistics
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 
 	"event-driven-backtesting-engine/internal/domain"
 	"event-driven-backtesting-engine/internal/events"
 	"event-driven-backtesting-engine/internal/portfolio"
 )
+
+var ErrInvalidPortfolioSnapshot = errors.New("invalid portfolio snapshot")
 
 type Engine struct {
 	snapshots  []portfolio.PortfolioSnapshot
@@ -33,6 +37,12 @@ func (e *Engine) Consume(event events.Event) error {
 	switch event := event.(type) {
 
 	case events.TradeExecutedEvent:
+		candidateTrades := make([]domain.Trade, len(e.trades)+1)
+		copy(candidateTrades, e.trades)
+		candidateTrades[len(e.trades)] = event.Trade
+		if _, err := pairTrades(candidateTrades); err != nil {
+			return err
+		}
 		e.trades = append(
 			e.trades,
 			event.Trade,
@@ -44,6 +54,9 @@ func (e *Engine) Consume(event events.Event) error {
 		snapshot := portfolio.NewPortfolioSnapshot(
 			event.Portfolio,
 		)
+		if !finitePortfolioSnapshot(snapshot) {
+			return fmt.Errorf("%w: timestamp=%s", ErrInvalidPortfolioSnapshot, snapshot.Time.Format("2006-01-02T15:04:05.999999999Z07:00"))
+		}
 
 		for index := range e.snapshots {
 			if e.snapshots[index].Time.Equal(snapshot.Time) {
@@ -92,8 +105,24 @@ func (e *Engine) Trades() []domain.Trade {
 }
 
 // TradeStats returns aggregated trade statistics.
-func (e *Engine) TradeStats() TradeStat {
+func (e *Engine) TradeStats() (TradeStat, error) {
 	return NewTradeStat(e.trades)
+}
+
+func finitePortfolioSnapshot(snapshot portfolio.PortfolioSnapshot) bool {
+	values := []float64{
+		snapshot.Cash,
+		snapshot.Equity,
+		snapshot.PositionValue,
+		snapshot.UnrealizedPnL,
+		snapshot.RealizedPnL,
+	}
+	for _, value := range values {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return false
+		}
+	}
+	return true
 }
 
 func (e *Engine) saveBacktestResult(

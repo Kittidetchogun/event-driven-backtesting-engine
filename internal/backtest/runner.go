@@ -83,9 +83,13 @@ func NewRunner(
 	)
 
 	// Matching Engine
-	matchingEngine := matching.NewEngine(
+	matchingEngine, err := matching.NewEngine(
 		queue,
+		portfolioEngine,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Statistics Engine
 	statisticsEngine := statistics.NewEngine()
@@ -231,7 +235,9 @@ func (r *Runner) Run() (statistics.BacktestResult, error) {
 		}
 
 		// 5. Update portfolio valuation using current market price.
-		r.portfolio.UpdateMarketPrices(candle)
+		if err := r.portfolio.UpdateMarketPrices(candle); err != nil {
+			return statistics.BacktestResult{}, err
+		}
 
 		// 6. Process PortfolioUpdatedEvent.
 		if err := r.processQueue(); err != nil {
@@ -247,7 +253,10 @@ func (r *Runner) Run() (statistics.BacktestResult, error) {
 	}
 
 	// Build final backtest result.
-	result := r.buildResult()
+	result, err := r.buildResult()
+	if err != nil {
+		return statistics.BacktestResult{}, err
+	}
 
 	// Publish BacktestCompletedEvent.
 	completedEvent := r.buildCompletedEvent(result)
@@ -259,8 +268,11 @@ func (r *Runner) Run() (statistics.BacktestResult, error) {
 	return result, nil
 }
 
-func (r *Runner) buildResult() statistics.BacktestResult {
-	performance := r.statistics.Performance()
+func (r *Runner) buildResult() (statistics.BacktestResult, error) {
+	performance, err := r.statistics.Performance()
+	if err != nil {
+		return statistics.BacktestResult{}, err
+	}
 	equityCurve := r.statistics.EquityCurve()
 
 	return statistics.BacktestResult{
@@ -279,7 +291,7 @@ func (r *Runner) buildResult() statistics.BacktestResult {
 		WinRate:     performance.WinRate,
 		SharpeRatio: performance.SharpeRatio,
 		MaxDrawdown: performance.MaxDrawdown,
-	}
+	}, nil
 }
 
 func (r *Runner) buildCompletedEvent(
