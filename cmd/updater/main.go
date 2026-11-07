@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -18,6 +19,35 @@ func main() {
 	config, err := marketdata.LoadConfigFromEnv()
 	if err != nil {
 		logger.Printf("Market data sync failed: load config: %v", err)
+		os.Exit(1)
+	}
+
+	// CLI flag overrides (applied after .env defaults are loaded)
+	intervalFlag := flag.String("interval", "", "market data timeframe/interval (e.g. 5m, 1h, 1d)")
+	startFlag := flag.String("start", "", "start date YYYY-MM-DD (overrides .env MARKET_DATA_START_DATE)")
+	endFlag := flag.String("end", "", "exclusive end date YYYY-MM-DD (required with -backfill)")
+	symbolFlag := flag.String("symbol", "", "trading symbol (e.g. BTCUSDT)")
+	backfillFlag := flag.Bool("backfill", false, "download only missing candles in the explicit [start,end) range")
+	flag.Parse()
+
+	if *intervalFlag != "" {
+		config.Interval = *intervalFlag
+	}
+	if *startFlag != "" {
+		parsedStart, parseErr := time.Parse("2006-01-02", *startFlag)
+		if parseErr != nil {
+			logger.Printf("Market data sync failed: invalid -start date %q: %v", *startFlag, parseErr)
+			os.Exit(1)
+		}
+		config.StartDate = parsedStart.UTC()
+	}
+	if *symbolFlag != "" {
+		config.Symbol = *symbolFlag
+	}
+
+	// Re-validate after flag overrides (catches e.g. unsupported interval)
+	if err := marketdata.ValidateConfig(config); err != nil {
+		logger.Printf("Market data sync failed: invalid config: %v", err)
 		os.Exit(1)
 	}
 
@@ -49,7 +79,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := updater.Sync(ctx); err != nil {
+	var endDate time.Time
+	if *backfillFlag {
+		if *endFlag == "" {
+			logger.Println("Market data sync failed: -end is required with -backfill")
+			os.Exit(1)
+		}
+		endDate, err = time.Parse("2006-01-02", *endFlag)
+		if err != nil {
+			logger.Printf("Market data sync failed: invalid -end date %q: %v", *endFlag, err)
+			os.Exit(1)
+		}
+		endDate = endDate.UTC()
+		if !config.StartDate.Before(endDate) {
+			logger.Println("Market data sync failed: -start must be before -end for backfill")
+			os.Exit(1)
+		}
+	}
+
+	if *backfillFlag {
+		err = updater.Backfill(ctx, config.StartDate, endDate)
+	} else {
+		err = updater.Sync(ctx)
+	}
+	if err != nil {
 		logger.Printf("Market data sync failed: %v", err)
 		os.Exit(1)
 	}

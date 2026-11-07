@@ -577,16 +577,16 @@ func TestBacktestEndToEnd_PostgreSQL(t *testing.T) {
 	t.Logf("Average Win        : $%.2f", tradeStats.Win_Avg)
 	t.Logf("Average Loss       : $%.2f", tradeStats.Loss_Avg)
 
-	t.Log("")
-	t.Log("Executed Trades")
+	// t.Log("")
+	// t.Log("Executed Trades")
 
-	for i, trade := range trades {
-		t.Logf(
-			"Trade #%d: %+v",
-			i+1,
-			trade,
-		)
-	}
+	// for i, trade := range trades {
+	// 	t.Logf(
+	// 		"Trade #%d: %+v",
+	// 		i+1,
+	// 		trade,
+	// 	)
+	// }
 
 	t.Log("")
 	t.Log("Portfolio Snapshots")

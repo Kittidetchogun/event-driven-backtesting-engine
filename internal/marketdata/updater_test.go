@@ -43,6 +43,26 @@ func (r *fakeCandleRepository) GetLatestTimestamp(
 	return latest, found, nil
 }
 
+func (r *fakeCandleRepository) GetCandles(
+	ctx context.Context,
+	symbol string,
+	timeframe string,
+	start time.Time,
+	end time.Time,
+) ([]domain.Candle, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	candles := make([]domain.Candle, 0)
+	for _, candle := range r.candles {
+		if candle.Symbol == symbol && candle.Timeframe == timeframe &&
+			!candle.Timestamp.Before(start) && candle.Timestamp.Before(end) {
+			candles = append(candles, candle)
+		}
+	}
+	return candles, nil
+}
+
 func (r *fakeCandleRepository) InsertCandles(
 	ctx context.Context,
 	candles []domain.Candle,
@@ -140,6 +160,64 @@ func TestUpdaterSyncIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestUpdaterBackfillDownloadsOnlyMissingCandles(t *testing.T) {
+	start := time.Date(2023, 12, 31, 23, 50, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	existing := start.Add(5 * time.Minute)
+	repository := &fakeCandleRepository{candles: []domain.Candle{testCandleAt(existing, "5m")}}
+
+	var requestedStart, requestedEnd int64
+	var requestCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		requestedStart, _ = strconv.ParseInt(r.URL.Query().Get("startTime"), 10, 64)
+		requestedEnd, _ = strconv.ParseInt(r.URL.Query().Get("endTime"), 10, 64)
+		_, _ = io.WriteString(w, `[[`+strconv.FormatInt(start.UnixMilli(), 10)+`,"1","2","0.5","1.5","10"]]`)
+	}))
+	defer server.Close()
+
+	updater := newTestUpdaterWithInterval(t, repository, server.URL, start, "5m")
+	if err := updater.Backfill(context.Background(), start, end); err != nil {
+		t.Fatalf("Backfill() error = %v", err)
+	}
+
+	if requestCount != 1 {
+		t.Fatalf("request count = %d, want 1", requestCount)
+	}
+	if requestedStart != start.UnixMilli() || requestedEnd != start.UnixMilli() {
+		t.Fatalf("requested range = [%d, %d], want [%d, %d]", requestedStart, requestedEnd, start.UnixMilli(), start.UnixMilli())
+	}
+	if updater.LastResult().Downloaded != 1 || updater.LastResult().Inserted != 1 {
+		t.Fatalf("LastResult() = %+v, want downloaded=1 inserted=1", updater.LastResult())
+	}
+
+	if err := updater.Backfill(context.Background(), start, end); err != nil {
+		t.Fatalf("second Backfill() error = %v", err)
+	}
+	if requestCount != 1 {
+		t.Fatalf("second backfill request count = %d, want 1", requestCount)
+	}
+}
+
+func TestUpdaterBackfillRejectsInvalidRange(t *testing.T) {
+	updater := newTestUpdaterWithInterval(
+		t,
+		&fakeCandleRepository{},
+		"http://unused.invalid",
+		time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		"5m",
+	)
+
+	err := updater.Backfill(
+		context.Background(),
+		time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	if err == nil {
+		t.Fatal("Backfill() error = nil, want invalid range error")
+	}
+}
+
 func TestValidateCandlesDetectsDuplicateTimestamp(t *testing.T) {
 	timestamp := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	err := ValidateCandles([]domain.Candle{
@@ -173,11 +251,23 @@ func newTestUpdater(
 ) *Updater {
 	t.Helper()
 
+	return newTestUpdaterWithInterval(t, repository, binanceURL, startDate, "1d")
+}
+
+func newTestUpdaterWithInterval(
+	t *testing.T,
+	repository CandleRepository,
+	binanceURL string,
+	startDate time.Time,
+	interval string,
+) *Updater {
+	t.Helper()
+
 	updater, err := NewUpdater(
 		repository,
 		Config{
 			Symbol:       "BTCUSDT",
-			Interval:     "1d",
+			Interval:     interval,
 			StartDate:    startDate,
 			BinanceURL:   binanceURL,
 			RequestLimit: 1000,
@@ -192,10 +282,14 @@ func newTestUpdater(
 }
 
 func testCandle(timestamp time.Time) domain.Candle {
+	return testCandleAt(timestamp, "1d")
+}
+
+func testCandleAt(timestamp time.Time, timeframe string) domain.Candle {
 	return domain.Candle{
 		Timestamp: timestamp,
 		Symbol:    "BTCUSDT",
-		Timeframe: "1d",
+		Timeframe: timeframe,
 		Open:      1,
 		High:      2,
 		Low:       0.5,

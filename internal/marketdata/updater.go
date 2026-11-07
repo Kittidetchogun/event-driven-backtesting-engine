@@ -30,15 +30,17 @@ var (
 
 type CandleRepository interface {
 	GetLatestTimestamp(ctx context.Context, symbol string, timeframe string) (time.Time, bool, error)
+	GetCandles(ctx context.Context, symbol string, timeframe string, start time.Time, end time.Time) ([]domain.Candle, error)
 	InsertCandles(ctx context.Context, candles []domain.Candle) (int64, error)
 }
 
 type Config struct {
-	Symbol       string
-	Interval     string
-	StartDate    time.Time
-	BinanceURL   string
-	RequestLimit int
+	Symbol        string
+	Interval      string
+	StartDate     time.Time
+	BinanceURL    string
+	RequestLimit  int
+	SleepDuration time.Duration
 }
 
 type SyncResult struct {
@@ -94,12 +96,25 @@ func LoadConfigFromEnv() (Config, error) {
 		requestLimit = parsed
 	}
 
+	sleepDuration := 200 * time.Millisecond
+	if value := os.Getenv("BINANCE_REQUEST_SLEEP_SECONDS"); value != "" {
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse BINANCE_REQUEST_SLEEP_SECONDS: %w", err)
+		}
+		if parsed < 0 {
+			return Config{}, errors.New("BINANCE_REQUEST_SLEEP_SECONDS must be non-negative")
+		}
+		sleepDuration = time.Duration(parsed * float64(time.Second))
+	}
+
 	config := Config{
-		Symbol:       os.Getenv("MARKET_DATA_SYMBOL"),
-		Interval:     os.Getenv("MARKET_DATA_INTERVAL"),
-		StartDate:    startDate.UTC(),
-		BinanceURL:   os.Getenv("BINANCE_KLINES_URL"),
-		RequestLimit: requestLimit,
+		Symbol:        os.Getenv("MARKET_DATA_SYMBOL"),
+		Interval:      os.Getenv("MARKET_DATA_INTERVAL"),
+		StartDate:     startDate.UTC(),
+		BinanceURL:    os.Getenv("BINANCE_KLINES_URL"),
+		RequestLimit:  requestLimit,
+		SleepDuration: sleepDuration,
 	}
 	if err := validateConfig(config); err != nil {
 		return Config{}, err
@@ -175,6 +190,75 @@ func (u *Updater) Sync(ctx context.Context) error {
 	return nil
 }
 
+// Backfill downloads only missing candles in the half-open time range [start, end).
+// It is intentionally separate from Sync so normal forward synchronization keeps
+// its latest-timestamp behavior.
+func (u *Updater) Backfill(ctx context.Context, start time.Time, end time.Time) error {
+	u.lastResult = SyncResult{}
+
+	interval, err := intervalDuration(u.config.Interval)
+	if err != nil {
+		return err
+	}
+
+	start = start.UTC()
+	end = end.UTC()
+	if !start.Before(end) {
+		return errors.New("backfill start must be before end")
+	}
+
+	existing, err := u.repository.GetCandles(ctx, u.config.Symbol, u.config.Interval, start, end)
+	if err != nil {
+		return fmt.Errorf("get existing candles for backfill: %w", err)
+	}
+	existingByTimestamp := make(map[time.Time]struct{}, len(existing))
+	for _, candle := range existing {
+		existingByTimestamp[candle.Timestamp.UTC()] = struct{}{}
+	}
+
+	downloaded := make([]domain.Candle, 0)
+	for current := start; current.Before(end); {
+		if _, ok := existingByTimestamp[current]; ok {
+			current = current.Add(interval)
+			continue
+		}
+
+		gapStart := current
+		for current.Before(end) {
+			if _, ok := existingByTimestamp[current]; ok {
+				break
+			}
+			current = current.Add(interval)
+		}
+
+		gapEnd := current.Add(-interval)
+		candles, err := u.downloadCandles(ctx, gapStart, gapEnd)
+		if err != nil {
+			return err
+		}
+		downloaded = append(downloaded, candles...)
+	}
+
+	if len(downloaded) == 0 {
+		return nil
+	}
+
+	if err := ValidateCandles(downloaded); err != nil {
+		return fmt.Errorf("validate downloaded candles: %w", err)
+	}
+
+	inserted, err := u.repository.InsertCandles(ctx, downloaded)
+	if err != nil {
+		return fmt.Errorf("insert backfilled candles: %w", err)
+	}
+
+	u.lastResult = SyncResult{
+		Downloaded: len(downloaded),
+		Inserted:   inserted,
+	}
+	return nil
+}
+
 func (u *Updater) LastResult() SyncResult {
 	return u.lastResult
 }
@@ -206,6 +290,18 @@ func (u *Updater) downloadCandles(ctx context.Context, start time.Time, end time
 			return nil, errors.New("binance pagination did not advance")
 		}
 		startMS = nextStart
+
+		if len(candles) >= 50000 && len(candles)%50000 == 0 {
+			u.logger.Printf("Downloaded %d candles so far...", len(candles))
+		}
+
+		if u.config.SleepDuration > 0 && startMS <= endMS {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(u.config.SleepDuration):
+			}
+		}
 	}
 
 	return candles, nil
@@ -399,7 +495,7 @@ func parseRawString(raw json.RawMessage) (string, error) {
 	return number.String(), nil
 }
 
-func validateConfig(config Config) error {
+func ValidateConfig(config Config) error {
 	if config.Symbol == "" {
 		return errors.New("MARKET_DATA_SYMBOL is required")
 	}
@@ -415,11 +511,18 @@ func validateConfig(config Config) error {
 	if config.RequestLimit <= 0 || config.RequestLimit > defaultRequestLimit {
 		return fmt.Errorf("BINANCE_REQUEST_LIMIT must be between 1 and %d", defaultRequestLimit)
 	}
+	if config.SleepDuration < 0 {
+		return errors.New("sleep duration must be non-negative")
+	}
 	if _, err := intervalDuration(config.Interval); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func validateConfig(config Config) error {
+	return ValidateConfig(config)
 }
 
 func intervalDuration(interval string) (time.Duration, error) {

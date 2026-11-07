@@ -1,4 +1,4 @@
-package postgres
+﻿package postgres
 
 import (
 	"context"
@@ -92,6 +92,8 @@ func (r *CandleRepository) GetLatestTimestamp(
 	return timestamp, true, nil
 }
 
+const insertChunkSize = 2000
+
 func (r *CandleRepository) InsertCandles(
 	ctx context.Context,
 	candles []domain.Candle,
@@ -108,32 +110,40 @@ func (r *CandleRepository) InsertCandles(
 		ON CONFLICT (timestamp, symbol, timeframe) DO NOTHING
 	`
 
-	batch := &pgx.Batch{}
-	for _, candle := range candles {
-		batch.Queue(
-			query,
-			candle.Timestamp,
-			candle.Symbol,
-			candle.Timeframe,
-			candle.Open,
-			candle.High,
-			candle.Low,
-			candle.Close,
-			candle.Volume,
-		)
-	}
-
-	results := r.pool.SendBatch(ctx, batch)
-	defer results.Close()
-
-	var inserted int64
-	for range candles {
-		commandTag, err := results.Exec()
-		if err != nil {
-			return inserted, err
+	var totalInserted int64
+	for i := 0; i < len(candles); i += insertChunkSize {
+		end := i + insertChunkSize
+		if end > len(candles) {
+			end = len(candles)
 		}
-		inserted += commandTag.RowsAffected()
+		chunk := candles[i:end]
+
+		batch := &pgx.Batch{}
+		for _, candle := range chunk {
+			batch.Queue(
+				query,
+				candle.Timestamp,
+				candle.Symbol,
+				candle.Timeframe,
+				candle.Open,
+				candle.High,
+				candle.Low,
+				candle.Close,
+				candle.Volume,
+			)
+		}
+
+		results := r.pool.SendBatch(ctx, batch)
+		for range chunk {
+			commandTag, err := results.Exec()
+			if err != nil {
+				results.Close()
+				return totalInserted, err
+			}
+			totalInserted += commandTag.RowsAffected()
+		}
+		results.Close()
 	}
 
-	return inserted, nil
+	return totalInserted, nil
 }
